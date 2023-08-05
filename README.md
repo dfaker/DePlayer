@@ -7,15 +7,15 @@ Minimal video player with automatic directory scanning, full text and property s
 
 Move mouse to left edge for library, right edge for current file options.
 
-`a` `d` - Seek forwards and backwards
-`q` - Quit
-`1`-`8` - Seek to percentage into video.
-`9` `0` - Volume down and Volume up
-`m` - Toggle mute
-`w` `e` - skip to next and previous in playlist
-`y` `u` - Upvote / Downvote current video score 
-`f` - toggle fullscreen
-`space` - pause
+- `a` `d` - Seek forwards and backwards
+- `q` - Quit
+- `1`-`8` - Seek to percentage into video.
+- `9` `0` - Volume down and Volume up
+- `m` - Toggle mute
+- `w` `e` - skip to next and previous in playlist
+- `y` `u` - Upvote / Downvote current video score 
+- `f` - toggle fullscreen
+- `space` - pause
 
 # Search Operators
 ![image](https://github.com/dfaker/DePlayer/assets/35278260/641c0189-7578-461a-8e38-4e3108837fcd)
