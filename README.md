@@ -3,9 +3,17 @@ Minimal video player with automatic directory scanning, full text and property s
 
 ![image](https://github.com/dfaker/DePlayer/assets/35278260/94655ddb-8224-4395-898f-9dd4297ac801)
 
-# Controls
+# Getting started
 
 Move mouse to left edge for library, right edge for current file options.
+
+To start add at least one folder as a Watched Path in the options tab, accessible on the menu that popups up from the left edge.
+
+![image](https://github.com/dfaker/DePlayer/assets/35278260/2a4198a2-1180-4d3a-a45e-96284e0e19c7)
+
+
+# Controls
+
 
 - `a` `d` - Seek forwards and backwards
 - `q` - Quit
