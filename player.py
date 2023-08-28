@@ -20,6 +20,9 @@ except Exception as e:
 scriptPath = os.path.dirname(os.path.abspath(__file__))
 os.environ["PATH"] = scriptPath + os.pathsep + os.environ["PATH"]
 
+isinitialFile=True
+currentFile = None
+
 import mpv
 
 root = tk.Tk()
@@ -104,11 +107,35 @@ class watchedPath(tk.Frame):
 
         self.master=master
         self.path = path
-        self.label = ttk.Label(self,text=path)
-        self.rembutton = ttk.Button(self,text='Remove Path', command=self.rem)
+
+        self.configure(relief='raised', border=1, borderwidth=1)
+
+        self.pathframe = ttk.Frame(self)
+
+        self.label = ttk.Label(self.pathframe,text=path)
+        self.rembutton = ttk.Button(self.pathframe,text='Remove Path', command=self.rem)
 
         self.label.pack(anchor="nw", side="left", expand=True, fill='x')
         self.rembutton.pack(anchor="nw", side="right", expand=False, fill='x')
+
+
+        self.pathframe.pack(anchor="sw", side="top", expand=False, fill='x')
+
+        self.optionframe = ttk.Frame(self)
+
+        self.allowDelete = ttk.Checkbutton(self.optionframe,text='Allow Deletion')
+        self.allowDelete.pack(anchor="sw", side="left", expand=False, fill='x')
+
+        self.removeNonVideo = ttk.Checkbutton(self.optionframe,text='Remove Non-Video files')
+        self.removeNonVideo.pack(anchor="sw", side="left", expand=False, fill='x')
+
+
+        self.removeEmptyDirs = ttk.Checkbutton(self.optionframe,text='Remove Empty Folders')
+        self.removeEmptyDirs.pack(anchor="sw", side="left", expand=False, fill='x')
+
+
+        self.optionframe.pack(anchor="sw", side="bottom", expand=True, fill='x')
+
 
     def rem(self):
         config['sourceDirs'].remove(self.path)
@@ -134,6 +161,8 @@ for path in config['sourceDirs']:
     watchedPaths.append(wp)
 
 pathsFrame.grid(row=20, column=0, columnspan=2, sticky='NESW', pady=16)
+
+
 
 notebook.add(listingframe, text='Library')
 notebook.add(optionsframe, text='Options')
@@ -220,7 +249,17 @@ tree.column("size", minwidth=90, width=90, stretch='NO')
 detailFrame = ttk.LabelFrame(listingframe,tex="Video Details")
 detailFrame.grid(row=2, column=0, sticky='nsew')
 
-player = mpv.MPV(wid=framemain.winfo_id(),
+playerFrames = []
+
+framemain.columnconfigure(0, weight=1)
+framemain.rowconfigure(0, weight=1)
+
+tempPlayer = ttk.Frame(framemain,padding=0,borderwidth=0,relief='flat')
+tempPlayer.grid(row=0, column=0, sticky='nsew')
+
+playerFrames.append(tempPlayer)
+
+player = mpv.MPV(wid=playerFrames[0].winfo_id(),
                  osc=True,
                  volume=40,
                  osd_on_seek='msg-bar',
@@ -232,6 +271,7 @@ player = mpv.MPV(wid=framemain.winfo_id(),
                  mute=True,
                  loop_file='inf')
 
+players = [player]
 
 optionsframe.columnconfigure(0, weight=1)
 optionsframe.columnconfigure(1, weight=1)
@@ -279,6 +319,17 @@ leftFramepcLabel.grid(row=3, column=0, sticky='NESW')
 leftFramepcspin = ttk.Spinbox(optionsframe,textvariable=leftFramepcvar,increment=1, from_=0, to=100)
 leftFramepcspin.grid(row=3, column=1, sticky='NESW')
 
+xplayerCountvar = tk.StringVar()
+xplayerCountLabel = ttk.Label(optionsframe,text="Multi Window X count")
+xplayerCountLabel.grid(row=2, column=0, sticky='NESW')
+xplayerCountspin = ttk.Spinbox(optionsframe,textvariable=xplayerCountvar,increment=1, from_=1, to=8)
+xplayerCountspin.grid(row=2, column=1, sticky='NESW')
+
+yplayerCountvar = tk.StringVar()
+yplayerCountLabel = ttk.Label(optionsframe,text="Multi Window Y count")
+yplayerCountLabel.grid(row=3, column=0, sticky='NESW')
+yplayerCountspin = ttk.Spinbox(optionsframe,textvariable=yplayerCountvar,increment=1, from_=1, to=8)
+yplayerCountspin.grid(row=3, column=1, sticky='NESW')
 
 
 
@@ -294,6 +345,21 @@ def initialscanvarchange(*args):
 
 initialscanvar.trace('w',initialscanvarchange)
 initialscanvar.set(bool(config.get('scanAtStartup',True)))
+
+xplayerCountvar.set(int(config.get('xplayerwindows',1)))
+yplayerCountvar.set(int(config.get('yplayerwindows',1)))
+
+from itertools import product
+
+def playerclick(e):
+    global playerFrames, players, currentFile, player
+    print(playerFrames.index(e.widget))
+    player = players[playerFrames.index(e.widget)]
+
+
+playerFrames[0].bind('<Button-1>',playerclick)
+
+
 
 def rightFramepcvarchange(*args):
     try:
@@ -318,15 +384,11 @@ leftFramepcvar.set(config.get('leftWidth',0.25)*100)
 sidewindowexpanded  = False
 lowerwindowexpanded = False
 
-framemain.config(cursor="none")
-
-cursorafer = None
-
 
 def rootmotion(e):
     global sidewindowexpanded
     global lowerwindowexpanded
-    global cursorafer
+    global player
 
     leftwidth = config.get('leftWidth',0.25) 
     rightwidth = config.get('rightWidth',0.25)
@@ -337,15 +399,10 @@ def rootmotion(e):
     absy = e.y_root-root.winfo_rooty()
     nabsy = framemain.winfo_height()-(e.y_root-root.winfo_rooty())
 
-    framemain.config(cursor="")
-    if cursorafer is not None:
-        root.after_cancel(cursorafer)
-    cursorafer = root.after(500,lambda : framemain.config(cursor="none"))
-
-    if nabsy < 175 and e.type == tk.EventType.ButtonPress and e.widget == framemain:
+    if nabsy < 175 and e.type == tk.EventType.ButtonPress and any(e.widget == x for x in playerFrames):
         player.command('seek',str(((e.x-55)/(framemain.winfo_width()-110)*100)),'absolute-percent')
 
-    if nabsy < 175 and e.type == tk.EventType.Motion and (e.state & (1 << 8)) and e.widget == framemain:
+    if nabsy < 175 and e.type == tk.EventType.Motion and (e.state & (1 << 8)) and any(e.widget == x for x in playerFrames):
         player.command('seek',str(((e.x-55)/(framemain.winfo_width()-110)*100)),'absolute-percent')
 
     if nabsy > 175 and absx < 120 and not sidewindowexpanded and not lowerwindowexpanded:
@@ -360,7 +417,7 @@ def rootmotion(e):
         frameupper.focus_set()
 
 
-    elif (lowerwindowexpanded or sidewindowexpanded) and e.widget == framemain:
+    elif (lowerwindowexpanded or sidewindowexpanded) and any(e.widget == x for x in playerFrames):
         sidewindowexpanded = False
         lowerwindowexpanded = False
         frameside.place( anchor='nw',relheight=1.0,relx=-1.0,relwidth=0.0 )
@@ -368,14 +425,128 @@ def rootmotion(e):
         frameupper.place( anchor='ne',relheight=0.0,relx=-1.0,relwidth=1.0)
         framemain.focus_set()
 
-    if e.widget == framemain:
-        player.command('script-message','osd_rootmotion')
-
+    for playerframe,iplayer in zip(playerFrames,players):
+        if e.widget == playerframe:
+            if e.type == tk.EventType.ButtonPress:
+                player = iplayer
+            iplayer.command('script-message','osd_rootmotion')
 
 
 root.bind('<Motion>',rootmotion)
 root.bind('<Button-1>',rootmotion)
 root.bind('<B1-Motion>',rootmotion)
+
+def scrollfunc(e):
+    global player
+    offset = 10
+    ctrl  = (e.state & 0x4) != 0
+    shift = (e.state & 0x1) != 0
+
+    if shift:
+        offset = 1
+    elif ctrl:
+        offset = 30
+
+    for playerframe,iplayer in zip(playerFrames,players):
+        if e.widget == playerframe:
+            player = iplayer
+            if e.delta > 0:
+                iplayer.command('seek',str(offset),'relative')
+            else:
+                iplayer.command('seek',str(-offset),'relative')
+
+playerFrames[0].bind('<MouseWheel>',scrollfunc)
+framemain.bind('<MouseWheel>',scrollfunc)
+
+def playerDimsChange(*args):
+    global playerFrames, players, currentFile
+    print('playerDimsChange ENTRY',args)
+    x,y = 1,1
+    try:
+        x,y = int(xplayerCountvar.get()),int(yplayerCountvar.get())
+    except Exception as e:
+        print(e)
+    print(x,y)
+
+    if x < 1:
+        x=1
+
+    if y < 1:
+        y = 1
+
+    config['xplayerwindows'] = x
+    config['yplayerwindows'] = y
+
+    while len(playerFrames) > x*y:
+        tempPlayer = playerFrames.pop()
+        tempPlayer.grid_forget()
+        tempPlayer.destroy()
+
+        tempplayer  = players.pop()
+        try:
+            tempplayer.terminate()
+        except Exception as e:
+            print(e)
+
+        try:
+            del tempplayer
+        except Exception as e:
+            print(e)
+
+
+    while len(playerFrames) < x*y:
+        tempPlayer = ttk.Frame(framemain,padding=0,borderwidth=0,relief='flat')
+        tempPlayer.grid(row=0, column=0, sticky='nsew')
+        tempPlayer.bind('<Button-1>',playerclick)
+
+        tempPlayer.bind('<Motion>',rootmotion)
+        tempPlayer.bind('<Button-1>',rootmotion)
+        tempPlayer.bind('<B1-Motion>',rootmotion)
+        tempPlayer.bind('<MouseWheel>',scrollfunc)
+
+        playerFrames.append(tempPlayer)
+
+        tempplayer = mpv.MPV(wid=tempPlayer.winfo_id(),
+                         osc=True,
+                         volume=40,
+                         osd_on_seek='msg-bar',
+                         script_opts='osc-layout=box,osc-seekbarstyle=knob',
+                         input_default_bindings=True,
+                         input_vo_keyboard=True,
+                         input_terminal=True,
+                         scripts='osd.lua',
+                         mute=True,
+                         loop_file='inf')
+        players.append(tempplayer)
+        
+        if currentFile is not None:
+            tempplayer.play(currentFile)
+        else:
+            tempplayer.play(config['lastPlayed'])
+
+
+    coords = []
+    for yi in range(0,y):
+        for xi in range(0,x):
+            coords.append((xi,yi))
+            framemain.columnconfigure(xi, weight=0)
+            framemain.rowconfigure(yi, weight=0)
+            framemain.columnconfigure(xi+1, weight=0)
+            framemain.rowconfigure(yi+1, weight=0)
+
+    for i,(xi,yi) in enumerate(coords):
+
+        tempPlayer = playerFrames[i]
+        framemain.columnconfigure(xi, weight=1)
+        framemain.rowconfigure(yi, weight=1)
+        tempPlayer.grid(row=yi, column=xi, sticky='nsew')
+
+
+xplayerCountvar.trace('w',playerDimsChange)
+yplayerCountvar.trace('w',playerDimsChange)
+
+xplayerCountvar.set(int(config.get('xplayerwindows',1)))
+yplayerCountvar.set(int(config.get('yplayerwindows',1)))
 
 
 framemain.focus_set()
@@ -522,9 +693,15 @@ def rescan_async():
 
     for k,v in list(foundVideos.items()):
         if not os.path.exists(k):
-            del foundVideos[k]
+            try:
+                del foundVideos[k]
+            except Exception as e:
+                print(e)
         if v.get('sorcescandir') not in config['sourceDirs']:
-            del foundVideos[k]
+            try:
+                del foundVideos[k]
+            except Exception as e:
+                print(e)
 
     pl = sorted(list(foundVideos.items()))
     dosearch()
@@ -588,10 +765,13 @@ def deleteallLowScore():
     dosearch()
 
 def videoRandom():
-    children = tree.get_children()
-    iidx = random.choice(children)
-    tree.selection_set(iidx)
-    tree.see(iidx)
+    try:
+        children = tree.get_children()
+        iidx = random.choice(children)
+        tree.selection_set(iidx)
+        tree.see(iidx)
+    except Exception as e:
+        print(e)
 
 def videoDownvote(skip=False):
     try:
@@ -692,11 +872,8 @@ def keyfunc(e):
 
 
 framemain.bind('<KeyPress>',keyfunc)
-framemain.config(cursor="none")
 
 
-isinitialFile=True
-currentFile = None
 def propertyChange(name,value):
     global isinitialFile
     global currentFile
@@ -718,23 +895,7 @@ def propertyChange(name,value):
 player.observe_property('duration', propertyChange)
 player.observe_property('path', propertyChange)
 
-def scrollfunc(e):
 
-    offset = 10
-    ctrl  = (e.state & 0x4) != 0
-    shift = (e.state & 0x1) != 0
-
-    if shift:
-        offset = 1
-    elif ctrl:
-        offset = 30
-
-    if e.delta > 0:
-        player.command('seek',str(offset),'relative')
-    else:
-        player.command('seek',str(-offset),'relative')
-
-framemain.bind('<MouseWheel>',scrollfunc)
 lastplayed = config.get('lastPlayed','NONE')
 
 
