@@ -3,6 +3,8 @@ Minimal video player with automatic directory scanning, full text and property s
 
 ![image](https://github.com/dfaker/DePlayer/assets/35278260/94655ddb-8224-4395-898f-9dd4297ac801)
 
+
+
 # Getting started
 
 Move mouse to left edge for library, right edge for current file options.
@@ -23,7 +25,11 @@ To start add at least one folder as a Watched Path in the options tab, accessibl
 - `w` `e` - skip to next and previous in playlist
 - `y` `u` - Upvote / Downvote current video score 
 - `f` - toggle fullscreen
+- `r` - play random entry
+- `ctrl-r` - play random entry on all grid cells.
 - `space` - pause
+
+in grid mode, click a video to use the controls for that video, or switch with `<` and `>`
 
 # Search Operators
 ![image](https://github.com/dfaker/DePlayer/assets/35278260/641c0189-7578-461a-8e38-4e3108837fcd)
@@ -35,3 +41,11 @@ Full text search of all files, properties in the format `score=0` `score=1` `sco
 
 Initial seek offset - position to start playing newly opened files at.
 Scan at startup - Scan all watched folders every time the program starts.
+
+Grid
+![image](https://github.com/dfaker/DePlayer/assets/35278260/4c08086f-e219-47fa-ba64-81a0d159b135) 
+
+
+Grid With "Big Middle"
+![image](https://github.com/dfaker/DePlayer/assets/35278260/e63ad9e9-bf56-4264-b721-48d9d974ee11)
+
