@@ -22,6 +22,7 @@ os.environ["PATH"] = scriptPath + os.pathsep + os.environ["PATH"]
 
 isinitialFile=True
 currentFile = None
+filehist = config.get('filehist',[])
 
 import mpv
 
@@ -54,7 +55,11 @@ root.style.configure ("TNotebook.Tab.Label",color='white',foreground='white',bac
 root.style.configure ("TNotebook.label",color='white',foreground='white',background='#0f0f0f',bordercolor='#0f0f0f',highlightbackground='#0f0f0f',lightcolor='#0f0f0f')
 root.style.configure ("TNotebook.Pane",color='white',foreground='white',background='#0f0f0f',bordercolor='#0f0f0f',highlightbackground='#0f0f0f')
 root.style.configure ("TLabel",color='white',foreground='white',background='#0f0f0f')
+
 root.style.configure ("TFrame",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f',highlightbackground='#0f0f0f')
+
+root.style.configure ("borderhilight.TFrame",color='#69bfdb',borderwidth='5',foreground='#69bfdb',background='#69bfdb',bordercolor='#69bfdb',highlightbackground='#0f0f0f')
+
 root.style.configure ("TLabelframe",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f',highlightbackground='#0f0f0f',relief='flat')
 root.style.configure ("TLabelframe.Label",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f')
 root.style.configure ("TLabelframe.Frame",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f',highlightbackground='#0f0f0f')
@@ -331,10 +336,16 @@ yplayerCountLabel.grid(row=3, column=0, sticky='NESW')
 yplayerCountspin = ttk.Spinbox(optionsframe,textvariable=yplayerCountvar,increment=1, from_=1, to=8)
 yplayerCountspin.grid(row=3, column=1, sticky='NESW')
 
-
+bigMiddlevar   = tk.BooleanVar()
+bigMiddleLabel = ttk.Label(optionsframe,text="Big Middle")
+bigMiddleLabel.grid(row=4, column=0, sticky='NEW')
+bigMiddleCheck = ttk.Checkbutton(optionsframe,var=bigMiddlevar)
+bigMiddleCheck.grid(row=4, column=1, sticky='NEW')
 
 def initialseekchange(*args):
     player.start = initialseekpcvar.get()+'%'
+    for iplayer in players:
+        iplayer.start = initialseekpcvar.get()+'%'
     config['initialSeekOffset'] = initialseekpcvar.get()
 
 initialseekpcvar.trace('w',initialseekchange)
@@ -346,8 +357,10 @@ def initialscanvarchange(*args):
 initialscanvar.trace('w',initialscanvarchange)
 initialscanvar.set(bool(config.get('scanAtStartup',True)))
 
+bigMiddlevar.set(bool(config.get('bigMiddle',False)))
 xplayerCountvar.set(int(config.get('xplayerwindows',1)))
 yplayerCountvar.set(int(config.get('yplayerwindows',1)))
+
 
 from itertools import product
 
@@ -428,7 +441,9 @@ def rootmotion(e):
     for playerframe,iplayer in zip(playerFrames,players):
         if e.widget == playerframe:
             if e.type == tk.EventType.ButtonPress:
+                playerframe.configure(style="borderhilight.TFrame")
                 player = iplayer
+                player.command('script-message','osd_message',f'Selected')
             iplayer.command('script-message','osd_rootmotion')
 
 
@@ -450,6 +465,7 @@ def scrollfunc(e):
     for playerframe,iplayer in zip(playerFrames,players):
         if e.widget == playerframe:
             player = iplayer
+            player.command('script-message','osd_message',f'Selected')
             if e.delta > 0:
                 iplayer.command('seek',str(offset),'relative')
             else:
@@ -458,9 +474,36 @@ def scrollfunc(e):
 playerFrames[0].bind('<MouseWheel>',scrollfunc)
 framemain.bind('<MouseWheel>',scrollfunc)
 
+
+def propertyChange(name,value):
+    global isinitialFile
+    global currentFile
+    global filehist
+
+    if name == 'path' and value is not None:
+        currentFile = value
+        filehist = filehist[-100:]
+        if value not in filehist:
+            filehist.append(value)
+        config['lastPlayed'] = value
+        config['filehist'] = filehist[-100:]
+        if not isinitialFile:
+            pldat = foundVideos.get(value,{})
+            pldat['playcount'] = pldat.get('playcount',0)+1
+            try:
+                fn,score,pc,cdate,size = tree.item(currentFile, 'values')
+                tree.item(currentFile, values=(fn,score,str(int(pc)+1),cdate,size))
+            except Exception as e:
+                pass
+        tree.selection_set(currentFile)
+        isinitialFile = False
+
+
+player.observe_property('duration', propertyChange)
+player.observe_property('path', propertyChange)
+
 def playerDimsChange(*args):
     global playerFrames, players, currentFile
-    print('playerDimsChange ENTRY',args)
     x,y = 1,1
     try:
         x,y = int(xplayerCountvar.get()),int(yplayerCountvar.get())
@@ -476,8 +519,16 @@ def playerDimsChange(*args):
 
     config['xplayerwindows'] = x
     config['yplayerwindows'] = y
+    config['bigMiddle'] = bool(bigMiddlevar.get())
 
-    while len(playerFrames) > x*y:
+    usebigMiddleMode = bigMiddlevar.get()
+    usebigMiddleMode = usebigMiddleMode and x>3 and y>3
+
+    targetcount = x*y
+    if usebigMiddleMode:
+        targetcount = (x*2) + ((y-2)*2) + 1
+
+    while len(playerFrames) > targetcount:
         tempPlayer = playerFrames.pop()
         tempPlayer.grid_forget()
         tempPlayer.destroy()
@@ -494,7 +545,7 @@ def playerDimsChange(*args):
             print(e)
 
 
-    while len(playerFrames) < x*y:
+    while len(playerFrames) < targetcount:
         tempPlayer = ttk.Frame(framemain,padding=0,borderwidth=0,relief='flat')
         tempPlayer.grid(row=0, column=0, sticky='nsew')
         tempPlayer.bind('<Button-1>',playerclick)
@@ -516,7 +567,12 @@ def playerDimsChange(*args):
                          input_terminal=True,
                          scripts='osd.lua',
                          mute=True,
+                         start=initialseekpcvar.get()+'%',
                          loop_file='inf')
+
+        tempplayer.observe_property('duration', propertyChange)
+        tempplayer.observe_property('path', propertyChange)
+
         players.append(tempplayer)
         
         if currentFile is not None:
@@ -526,28 +582,54 @@ def playerDimsChange(*args):
 
 
     coords = []
-    for yi in range(0,y):
+    
+    if usebigMiddleMode:
+        for yi in range(0,y):
+            for xi in range(0,x):
+                framemain.columnconfigure(xi, weight=1)
+                framemain.rowconfigure(yi, weight=1)
+                framemain.columnconfigure(xi+1, weight=0)
+                framemain.rowconfigure(yi+1, weight=0)
+
         for xi in range(0,x):
-            coords.append((xi,yi))
-            framemain.columnconfigure(xi, weight=0)
-            framemain.rowconfigure(yi, weight=0)
-            framemain.columnconfigure(xi+1, weight=0)
-            framemain.rowconfigure(yi+1, weight=0)
+            coords.append((xi,0,1,1))
+            coords.append((xi,y-1,1,1))
+            pass
 
-    for i,(xi,yi) in enumerate(coords):
+        for yi in range(1,y-1):
+            coords.append((0,yi,1,1))
+            coords.append((x-1,yi,1,1))
+            pass
 
-        tempPlayer = playerFrames[i]
-        framemain.columnconfigure(xi, weight=1)
-        framemain.rowconfigure(yi, weight=1)
-        tempPlayer.grid(row=yi, column=xi, sticky='nsew')
+        coords.append((1,1,x-2,y-2))
+
+        print(coords)
+    else:
+        for yi in range(0,y):
+            for xi in range(0,x):
+                coords.append((xi,yi,1,1))
+                framemain.columnconfigure(xi, weight=0)
+                framemain.rowconfigure(yi, weight=0)
+                framemain.columnconfigure(xi+1, weight=0)
+                framemain.rowconfigure(yi+1, weight=0)
+
+    for i,(xi,yi,spanx,spany) in enumerate(coords):
+        try:
+            tempPlayer = playerFrames[i]
+            framemain.columnconfigure(xi, weight=1)
+            framemain.rowconfigure(yi, weight=1)
+            tempPlayer.grid(row=yi, column=xi, rowspan=spany, columnspan=spanx, sticky='nsew')
+        except Exception as e:
+            print(e)
 
 
 xplayerCountvar.trace('w',playerDimsChange)
 yplayerCountvar.trace('w',playerDimsChange)
+bigMiddlevar.trace('w',playerDimsChange)
 
 xplayerCountvar.set(int(config.get('xplayerwindows',1)))
 yplayerCountvar.set(int(config.get('yplayerwindows',1)))
-
+bigMiddlevar.set(bool(config.get('bigMiddle',False)))
 
 framemain.focus_set()
 
@@ -664,29 +746,31 @@ def rescan_async():
     for directory in config['sourceDirs']:
         for r,dl,fl in os.walk(directory):
             for f in fl:
-
-                p = os.path.join(r,f)
-                root.update_idletasks()
-                tg = mimetypes.guess_type(p)
-                if tg is not None and tg[0] is not None:
-                    if 'video' in tg[0]:
-                        if p not in foundVideos:
-                            stats = os.stat(p)
-                            foundVideos[p] = {'path':p,
-                                              'size':stats.st_size,
-                                              'playcount':0,
-                                              'score':0,
-                                              'createddate':stats.st_ctime,
-                                              'size':stats.st_size,
-                                              'sorcescandir':directory}
-                            player.command('script-message','osd_message',f'Added {p}')
-                    elif 'image' in tg[0]:
-                        pass
-                        #os.remove(p)
-                        #print('Removed',tg,p)
-                    else:
-                        pass
-                        #print('Bad',tg,p)
+                try:
+                    p = os.path.join(r,f)
+                    root.update_idletasks()
+                    tg = mimetypes.guess_type(p)
+                    if tg is not None and tg[0] is not None:
+                        if 'video' in tg[0]:
+                            if p not in foundVideos:
+                                stats = os.stat(p)
+                                foundVideos[p] = {'path':p,
+                                                  'size':stats.st_size,
+                                                  'playcount':0,
+                                                  'score':0,
+                                                  'createddate':stats.st_ctime,
+                                                  'size':stats.st_size,
+                                                  'sorcescandir':directory}
+                                player.command('script-message','osd_message',f'Added {p}')
+                        elif 'image' in tg[0]:
+                            pass
+                            #os.remove(p)
+                            #print('Removed',tg,p)
+                        else:
+                            pass
+                            #print('Bad',tg,p)
+                except Exception as e:
+                    print(e)
             #if len(fl) == 0 and len(dl) == 0:
             #    print('remdir',r)
             #    os.rmdir(r)
@@ -764,12 +848,23 @@ def deleteallLowScore():
     pl = temppl
     dosearch()
 
-def videoRandom():
+def videoRandom(restrictions=None):
     try:
         children = tree.get_children()
+
+        if restrictions is not None:
+            tempchildren = list(children[:])
+            for e in restrictions:
+                if e in tempchildren:
+                    tempchildren.remove(e)
+            if len(tempchildren)>0:
+                children = tempchildren
+
         iidx = random.choice(children)
         tree.selection_set(iidx)
         tree.see(iidx)
+        if restrictions is not None:
+            restrictions.append(iidx)
     except Exception as e:
         print(e)
 
@@ -810,6 +905,8 @@ root.bind('<Button-3>',lambda x:playlist_next())
 
 def keyfunc(e):
     global fsstate
+    global player
+    global currentFile
 
     offset = 10
     ctrl  = (e.state & 0x4) != 0
@@ -832,20 +929,26 @@ def keyfunc(e):
     elif e.keysym.lower() == 'q':
         root.destroy()
     elif e.keysym.lower() == 'm':
-        player.mute = not player.mute
-        vol = player.volume
-        if player.mute:
-            player.command('script-message','osd_message',f'🔇 {vol}')
-        else:
-            player.command('script-message','osd_message',f'🔊 {vol}')
-
+        for iplayer in players:
+            iplayer.mute = not iplayer.mute
+            vol = iplayer.volume
+            if iplayer.mute:
+                iplayer.command('script-message','osd_message',f'🔇 {vol}')
+            else:
+                iplayer.command('script-message','osd_message',f'🔊 {vol}')
     elif e.keysym.lower() == 'r':
-        videoRandom()
+        if ctrl:
+            tempplayer = player
+            restrictions = []
+            for iplayer in players:
+                player = iplayer
+                item_selected(videoRandom(restrictions=restrictions))
+        else:
+            videoRandom()
     elif e.keysym.lower() == 'e':
         playlist_next()
     elif e.keysym.lower() == 'w':
         playlist_prev()
-
     elif e.keysym.lower() == 'y':
         videoUpvote(skip=ctrl)
     elif e.keysym.lower() == 'u':
@@ -869,37 +972,35 @@ def keyfunc(e):
             player.command('script-message','osd_message',f'🔇 {vol}')
         else:
             player.command('script-message','osd_message',f'🔊 {vol}')
+    elif e.keysym == 'comma':
+        ind = 0
+        try:
+            ind = players.index(player)
+        except Exception as e:
+            print(e)
+
+        player = players[(ind-1)%len(players)]
+        player.command('script-message','osd_message',f'ACTIVE')
+    elif e.keysym == 'period':
+        ind = 0
+        try:
+            ind = players.index(player)
+        except Exception as e:
+            print(e)
+        player = players[(ind+1)%len(players)]
+        player.command('script-message','osd_message',f'ACTIVE')
 
 
 framemain.bind('<KeyPress>',keyfunc)
 
 
-def propertyChange(name,value):
-    global isinitialFile
-    global currentFile
-    if name == 'path' and value is not None:
-        currentFile = value
-        config['lastPlayed'] = value
-        if not isinitialFile:
-            pldat = foundVideos.get(value,{})
-            pldat['playcount'] = pldat.get('playcount',0)+1
-            try:
-                fn,score,pc,cdate,size = tree.item(currentFile, 'values')
-                tree.item(currentFile, values=(fn,score,str(int(pc)+1),cdate,size))
-            except Exception as e:
-                pass
-        tree.selection_set(currentFile)
-        isinitialFile = False
-
-
-player.observe_property('duration', propertyChange)
-player.observe_property('path', propertyChange)
-
-
 lastplayed = config.get('lastPlayed','NONE')
 
-
-if lastplayed is not None and tree.exists(lastplayed):
+print(len(players),config.get('filehist',[]))
+if len(players)>1 and len(config.get('filehist',[])) > 1:
+    for p,f in zip(players,filehist[::-1]):
+        p.play(f)
+elif lastplayed is not None and tree.exists(lastplayed):
     tree.selection_set(lastplayed)
     tree.see(lastplayed)    
 else:
@@ -912,7 +1013,6 @@ frameupper.columnconfigure(0, weight=0)
 frameupper.columnconfigure(1, weight=1)
 frameupper.columnconfigure(2, weight=0)
 frameupper.columnconfigure(3, weight=0)
-
 frameupper.columnconfigure(4, weight=1)
 frameupper.columnconfigure(5, weight=0)
 
