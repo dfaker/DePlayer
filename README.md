@@ -25,6 +25,7 @@ To start add at least one folder as a Watched Path in the options tab, accessibl
 - `w` `e` - skip to next and previous in playlist
 - `y` `u` - Upvote / Downvote current video score 
 - `f` - toggle fullscreen
+- `g` - toggle panscan fill mode
 - `r` - play random entry
 - `ctrl-r` - play random entry on all grid cells.
 - `space` - pause
