@@ -11,7 +11,7 @@ Move mouse to left edge for library, right edge for current file options.
 
 To start add at least one folder as a Watched Path in the options tab, accessible on the menu that popups up from the left edge.
 
-![image](https://github.com/dfaker/DePlayer/assets/35278260/2a4198a2-1180-4d3a-a45e-96284e0e19c7)
+![image](https://github.com/dfaker/DePlayer/assets/35278260/ced65ba0-88e2-432e-a23d-26fedab0e76f)
 
 
 # Controls
