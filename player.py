@@ -58,7 +58,7 @@ root.style.configure ("TLabel",color='white',foreground='white',background='#0f0
 
 root.style.configure ("TFrame",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f',highlightbackground='#0f0f0f')
 
-root.style.configure ("borderhilight.TFrame",color='#69bfdb',borderwidth='5',foreground='#69bfdb',background='#69bfdb',bordercolor='#69bfdb',highlightbackground='#0f0f0f')
+root.style.configure ("borderhilight.TFrame",color='#69bfdb',relief ='FLAT',borderwidth=50,foreground='#69bfdb',background='#69bfdb',bordercolor='#69bfdb',highlightbackground='#0f0f0f',padx='20')
 
 root.style.configure ("TLabelframe",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f',highlightbackground='#0f0f0f',relief='flat')
 root.style.configure ("TLabelframe.Label",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f')
@@ -327,20 +327,36 @@ leftFramepcspin.grid(row=3, column=1, sticky='NESW')
 xplayerCountvar = tk.StringVar()
 xplayerCountLabel = ttk.Label(optionsframe,text="Multi Window X count")
 xplayerCountLabel.grid(row=2, column=0, sticky='NESW')
-xplayerCountspin = ttk.Spinbox(optionsframe,textvariable=xplayerCountvar,increment=1, from_=1, to=8)
+xplayerCountspin = ttk.Spinbox(optionsframe,textvariable=xplayerCountvar,increment=1, from_=1, to=5)
 xplayerCountspin.grid(row=2, column=1, sticky='NESW')
 
 yplayerCountvar = tk.StringVar()
 yplayerCountLabel = ttk.Label(optionsframe,text="Multi Window Y count")
 yplayerCountLabel.grid(row=3, column=0, sticky='NESW')
-yplayerCountspin = ttk.Spinbox(optionsframe,textvariable=yplayerCountvar,increment=1, from_=1, to=8)
+yplayerCountspin = ttk.Spinbox(optionsframe,textvariable=yplayerCountvar,increment=1, from_=1, to=5)
 yplayerCountspin.grid(row=3, column=1, sticky='NESW')
 
-bigMiddlevar   = tk.BooleanVar()
-bigMiddleLabel = ttk.Label(optionsframe,text="Big Middle")
-bigMiddleLabel.grid(row=4, column=0, sticky='NEW')
-bigMiddleCheck = ttk.Checkbutton(optionsframe,var=bigMiddlevar)
-bigMiddleCheck.grid(row=4, column=1, sticky='NEW')
+layouts = [
+    "Grid",
+    "Grid",
+    "Big Middle Grid",
+    "Vert Stripe Grid",
+    "Horiz Stripe Grid",
+]
+
+layoutvar   = tk.StringVar()
+layoutvar.set(layouts[0])
+layoutLabel = ttk.Label(optionsframe,text="Layout")
+layoutLabel.grid(row=4, column=0, sticky='NEW')
+layoutOpt = ttk.OptionMenu(optionsframe,layoutvar,*layouts)
+layoutOpt.grid(row=4, column=1, sticky='NEW')
+
+panScanvar   = tk.BooleanVar()
+panScanLabel = ttk.Label(optionsframe,text="Fit Inner (pan scan)")
+panScanLabel.grid(row=5, column=0, sticky='NEW')
+panScanCheck = ttk.Checkbutton(optionsframe,var=panScanvar)
+panScanCheck.grid(row=5, column=1, sticky='NEW')
+
 
 def initialseekchange(*args):
     player.start = initialseekpcvar.get()+'%'
@@ -357,7 +373,7 @@ def initialscanvarchange(*args):
 initialscanvar.trace('w',initialscanvarchange)
 initialscanvar.set(bool(config.get('scanAtStartup',True)))
 
-bigMiddlevar.set(bool(config.get('bigMiddle',False)))
+layoutvar.set(str(config.get('layout',layouts[0])))
 xplayerCountvar.set(int(config.get('xplayerwindows',1)))
 yplayerCountvar.set(int(config.get('yplayerwindows',1)))
 
@@ -366,7 +382,6 @@ from itertools import product
 
 def playerclick(e):
     global playerFrames, players, currentFile, player
-    print(playerFrames.index(e.widget))
     player = players[playerFrames.index(e.widget)]
 
 
@@ -392,11 +407,8 @@ def leftFramepcvarchange(*args):
 leftFramepcvar.trace('w',leftFramepcvarchange)
 leftFramepcvar.set(config.get('leftWidth',0.25)*100)
 
-
-
 sidewindowexpanded  = False
 lowerwindowexpanded = False
-
 
 def rootmotion(e):
     global sidewindowexpanded
@@ -442,8 +454,12 @@ def rootmotion(e):
         if e.widget == playerframe:
             if e.type == tk.EventType.ButtonPress:
                 playerframe.configure(style="borderhilight.TFrame")
+                try:
+                    player.command('script-message','osd_message',f'')
+                except Exception as e:
+                    pass
                 player = iplayer
-                player.command('script-message','osd_message',f'Selected')
+                player.command('script-message','osd_message',f'<PLAYER SELECTED>')
             iplayer.command('script-message','osd_rootmotion')
 
 
@@ -458,21 +474,32 @@ def scrollfunc(e):
     shift = (e.state & 0x1) != 0
 
     if shift:
-        offset = 1
-    elif ctrl:
         offset = 30
 
     for playerframe,iplayer in zip(playerFrames,players):
         if e.widget == playerframe:
+            playerframe.configure(style="borderhilight.TFrame")
+            try:
+                player.command('script-message','osd_message',f'')
+            except Exception as e:
+                pass
             player = iplayer
-            player.command('script-message','osd_message',f'Selected')
-            if e.delta > 0:
-                iplayer.command('seek',str(offset),'relative')
+            player.command('script-message','osd_message',f'<PLAYER SELECTED>')
+
+            if ctrl:
+                if e.delta > 0:
+                    playlist_prev()
+                else:
+                    playlist_next()                
             else:
-                iplayer.command('seek',str(-offset),'relative')
+                if e.delta > 0:
+                    iplayer.command('seek',str(offset),'relative')
+                else:
+                    iplayer.command('seek',str(-offset),'relative')
 
 playerFrames[0].bind('<MouseWheel>',scrollfunc)
 framemain.bind('<MouseWheel>',scrollfunc)
+isStarting = True
 
 
 def propertyChange(name,value):
@@ -495,12 +522,15 @@ def propertyChange(name,value):
                 tree.item(currentFile, values=(fn,score,str(int(pc)+1),cdate,size))
             except Exception as e:
                 pass
-        tree.selection_set(currentFile)
-        isinitialFile = False
+        if not isStarting:
+            tree.selection_set(currentFile)
+            isinitialFile = False
 
 
 player.observe_property('duration', propertyChange)
 player.observe_property('path', propertyChange)
+
+dimsstartup = True
 
 def playerDimsChange(*args):
     global playerFrames, players, currentFile
@@ -509,7 +539,6 @@ def playerDimsChange(*args):
         x,y = int(xplayerCountvar.get()),int(yplayerCountvar.get())
     except Exception as e:
         print(e)
-    print(x,y)
 
     if x < 1:
         x=1
@@ -519,14 +548,29 @@ def playerDimsChange(*args):
 
     config['xplayerwindows'] = x
     config['yplayerwindows'] = y
-    config['bigMiddle'] = bool(bigMiddlevar.get())
 
-    usebigMiddleMode = bigMiddlevar.get()
-    usebigMiddleMode = usebigMiddleMode and x>3 and y>3
+
+    layoutname = layoutvar.get().strip()
+
+    if layoutname not in layouts:
+        layoutvar.set(layouts[0])
+        return
+
+    config['layout'] = layoutname
 
     targetcount = x*y
-    if usebigMiddleMode:
+
+
+    if layoutname == "Big Middle Grid" and x>2 and y>2:
         targetcount = (x*2) + ((y-2)*2) + 1
+    elif layoutname == "Vert Stripe Grid" and x>2:
+        targetcount = (y*2) + 1
+    elif layoutname == "Horiz Stripe Grid" and y>2:
+        targetcount = (x*2) + 1
+    else:
+        layoutname = 'Grid'
+
+    playersToReap = []
 
     while len(playerFrames) > targetcount:
         tempPlayer = playerFrames.pop()
@@ -534,15 +578,21 @@ def playerDimsChange(*args):
         tempPlayer.destroy()
 
         tempplayer  = players.pop()
-        try:
-            tempplayer.terminate()
-        except Exception as e:
-            print(e)
+        playersToReap.append(tempplayer)
 
-        try:
-            del tempplayer
-        except Exception as e:
-            print(e)
+    def reapPlayers():
+        for p in playersToReap:
+            try:
+                p.terminate()
+            except Exception as e:
+                print(e)
+            try:
+                del p
+            except Exception as e:
+                print(e)
+        playersToReap.clear()
+
+    root.after(1,reapPlayers)
 
 
     while len(playerFrames) < targetcount:
@@ -567,6 +617,7 @@ def playerDimsChange(*args):
                          input_terminal=True,
                          scripts='osd.lua',
                          mute=True,
+                         panscan=1 if panScanvar.get() else 0,
                          start=initialseekpcvar.get()+'%',
                          loop_file='inf')
 
@@ -574,16 +625,16 @@ def playerDimsChange(*args):
         tempplayer.observe_property('path', propertyChange)
 
         players.append(tempplayer)
-        
-        if currentFile is not None:
-            tempplayer.play(currentFile)
-        else:
-            tempplayer.play(config['lastPlayed'])
 
+        if not dimsstartup:
+            if currentFile is not None:
+                tempplayer.play(currentFile)
+            else:
+                tempplayer.play(config['lastPlayed'])
 
     coords = []
-    
-    if usebigMiddleMode:
+
+    if layoutname == 'Big Middle Grid':
         for yi in range(0,y):
             for xi in range(0,x):
                 framemain.columnconfigure(xi, weight=1)
@@ -602,8 +653,33 @@ def playerDimsChange(*args):
             pass
 
         coords.append((1,1,x-2,y-2))
+    elif layoutname == "Vert Stripe Grid":
+        for yi in range(0,y):
+            for xi in range(0,x):
+                framemain.columnconfigure(xi, weight=1)
+                framemain.rowconfigure(yi, weight=1)
+                framemain.columnconfigure(xi+1, weight=0)
+                framemain.rowconfigure(yi+1, weight=0)
 
-        print(coords)
+        for yi in range(0,y):
+            coords.append((0,yi,1,1))
+            coords.append((x-1,yi,1,1))
+            pass
+        coords.append((1,0,x-2,y))
+    elif layoutname == "Horiz Stripe Grid":
+        for yi in range(0,y):
+            for xi in range(0,x):
+                framemain.columnconfigure(xi, weight=1)
+                framemain.rowconfigure(yi, weight=1)
+                framemain.columnconfigure(xi+1, weight=0)
+                framemain.rowconfigure(yi+1, weight=0)
+        for xi in range(0,x):
+            coords.append((xi,0,1,1))
+            coords.append((xi,y-1,1,1))
+            pass
+        coords.append((0,1,x,y-2))
+
+
     else:
         for yi in range(0,y):
             for xi in range(0,x):
@@ -623,13 +699,27 @@ def playerDimsChange(*args):
             print(e)
 
 
+xplayerCountvar.set(min(int(config.get('xplayerwindows',1)),4))
+yplayerCountvar.set(min(int(config.get('yplayerwindows',1)),4))
+
 xplayerCountvar.trace('w',playerDimsChange)
 yplayerCountvar.trace('w',playerDimsChange)
-bigMiddlevar.trace('w',playerDimsChange)
+layoutvar.trace('w',playerDimsChange)
 
-xplayerCountvar.set(int(config.get('xplayerwindows',1)))
-yplayerCountvar.set(int(config.get('yplayerwindows',1)))
-bigMiddlevar.set(bool(config.get('bigMiddle',False)))
+layoutvar.set(str(config.get('layout',layouts[0])))
+
+dimsstartup = False
+
+def panscanChange(*args):
+    config['panscan'] = panScanvar.get()
+    for iplayer in players:
+        if panScanvar.get():
+            iplayer.panscan = 1
+        else:
+            iplayer.panscan = 0
+
+panScanvar.trace('w',panscanChange)
+panScanvar.set(bool(config.get('panscan',False)))
 
 framemain.focus_set()
 
@@ -761,7 +851,7 @@ def rescan_async():
                                                   'createddate':stats.st_ctime,
                                                   'size':stats.st_size,
                                                   'sorcescandir':directory}
-                                player.command('script-message','osd_message',f'Added {p}')
+                                players[0].command('script-message','osd_message',f'Added {p}')
                         elif 'image' in tg[0]:
                             pass
                             #os.remove(p)
@@ -850,10 +940,10 @@ def deleteallLowScore():
 
 def videoRandom(restrictions=None):
     try:
-        children = tree.get_children()
+        children = list(tree.get_children())
 
         if restrictions is not None:
-            tempchildren = list(children[:])
+            tempchildren = children[:]
             for e in restrictions:
                 if e in tempchildren:
                     tempchildren.remove(e)
@@ -903,6 +993,7 @@ def videoUpvote(skip=False):
 root.bind('<Button-2>',lambda x:playlist_prev())
 root.bind('<Button-3>',lambda x:playlist_next())
 
+
 def keyfunc(e):
     global fsstate
     global player
@@ -928,6 +1019,8 @@ def keyfunc(e):
         player.command('seek',str(offset),'relative')
     elif e.keysym.lower() == 'q':
         root.destroy()
+    elif e.keysym.lower() == 'g':
+        panScanvar.set(not panScanvar.get())
     elif e.keysym.lower() == 'm':
         for iplayer in players:
             iplayer.mute = not iplayer.mute
@@ -978,17 +1071,24 @@ def keyfunc(e):
             ind = players.index(player)
         except Exception as e:
             print(e)
-
+        try:
+            player.command('script-message','osd_message',f'')
+        except Exception as e:
+            pass
         player = players[(ind-1)%len(players)]
-        player.command('script-message','osd_message',f'ACTIVE')
+        player.command('script-message','osd_message',f'<PLAYER SELECTED>')
     elif e.keysym == 'period':
         ind = 0
         try:
             ind = players.index(player)
         except Exception as e:
             print(e)
+        try:
+            player.command('script-message','osd_message',f'')
+        except Exception as e:
+            pass
         player = players[(ind+1)%len(players)]
-        player.command('script-message','osd_message',f'ACTIVE')
+        player.command('script-message','osd_message',f'<PLAYER SELECTED>')
 
 
 framemain.bind('<KeyPress>',keyfunc)
@@ -996,9 +1096,9 @@ framemain.bind('<KeyPress>',keyfunc)
 
 lastplayed = config.get('lastPlayed','NONE')
 
-print(len(players),config.get('filehist',[]))
 if len(players)>1 and len(config.get('filehist',[])) > 1:
     for p,f in zip(players,filehist[::-1]):
+        print('init',f)
         p.play(f)
 elif lastplayed is not None and tree.exists(lastplayed):
     tree.selection_set(lastplayed)
@@ -1040,6 +1140,7 @@ buttonDeleteLowScore = ttk.Button(frameupper,text='Delete videos with score < 0'
                                   command=deleteallLowScore)
 buttonDeleteLowScore.grid(row=1, column=0, columnspan=6, sticky='nesw')
 
+isStarting = False
 
 root.mainloop()
 
