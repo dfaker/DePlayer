@@ -26,9 +26,16 @@ To start add at least one folder as a Watched Path in the options tab, accessibl
 - `y` `u` - Upvote / Downvote current video score 
 - `f` - toggle fullscreen
 - `g` - toggle panscan fill mode
-- `r` - play random entry
+- `r` - play random video
+- `b` - pack to previous video
 - `ctrl-r` - play random entry on all grid cells.
 - `space` - pause
+- `arrow keys` - pan anround video
+- `ctrl+arrow kets` - zoom video
+- `/` - reset zoom
+- `-` - scrink grid cell
+- `=` - enlarge grid cell
+- `+` - reset grid cell
 
 in grid mode, click a video to use the controls for that video, or switch with `<` and `>`
 
