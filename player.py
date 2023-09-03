@@ -7,6 +7,9 @@ import random
 import json
 import datetime
 import threading
+import time
+
+undolog = {}
 
 RELEASE_NUMVER = 'v0.1'
 
@@ -259,7 +262,7 @@ playerFrames = []
 framemain.columnconfigure(0, weight=1)
 framemain.rowconfigure(0, weight=1)
 
-tempPlayer = ttk.Frame(framemain,padding=0,borderwidth=0,relief='flat')
+tempPlayer = ttk.Frame(framemain,padding=0,borderwidth=0,relief='flat',cursor='crosshair')
 tempPlayer.grid(row=0, column=0, sticky='nsew')
 
 playerFrames.append(tempPlayer)
@@ -301,9 +304,9 @@ optionsframe.rowconfigure(1, weight=0)
 
 
 initialseekpcvar = tk.StringVar()
-initialseekspinLabel = ttk.Label(optionsframe,text="Initial Seek Offset %")
+initialseekspinLabel = ttk.Label(optionsframe,text="Initial Seek Offset % (-1=random)")
 initialseekspinLabel.grid(row=0, column=0, sticky='NESW')
-initialseekspin = ttk.Spinbox(optionsframe,textvariable=initialseekpcvar,increment=1, from_=0, to=100)
+initialseekspin = ttk.Spinbox(optionsframe,textvariable=initialseekpcvar,increment=1, from_=-1, to=100)
 initialseekspin.grid(row=0, column=1, sticky='NESW')
 
 initialscanvar   = tk.BooleanVar()
@@ -325,13 +328,13 @@ leftFramepcspin = ttk.Spinbox(optionsframe,textvariable=leftFramepcvar,increment
 leftFramepcspin.grid(row=3, column=1, sticky='NESW')
 
 xplayerCountvar = tk.StringVar()
-xplayerCountLabel = ttk.Label(optionsframe,text="Multi Window X count")
+xplayerCountLabel = ttk.Label(optionsframe,text="Multi Window Columns")
 xplayerCountLabel.grid(row=2, column=0, sticky='NESW')
 xplayerCountspin = ttk.Spinbox(optionsframe,textvariable=xplayerCountvar,increment=1, from_=1, to=5)
 xplayerCountspin.grid(row=2, column=1, sticky='NESW')
 
 yplayerCountvar = tk.StringVar()
-yplayerCountLabel = ttk.Label(optionsframe,text="Multi Window Y count")
+yplayerCountLabel = ttk.Label(optionsframe,text="Multi Window Rows")
 yplayerCountLabel.grid(row=3, column=0, sticky='NESW')
 yplayerCountspin = ttk.Spinbox(optionsframe,textvariable=yplayerCountvar,increment=1, from_=1, to=5)
 yplayerCountspin.grid(row=3, column=1, sticky='NESW')
@@ -357,11 +360,37 @@ panScanLabel.grid(row=5, column=0, sticky='NEW')
 panScanCheck = ttk.Checkbutton(optionsframe,var=panScanvar)
 panScanCheck.grid(row=5, column=1, sticky='NEW')
 
+osdvar   = tk.BooleanVar()
+osdvar.set(config.get('showOSD',True))
+osdLabel = ttk.Label(optionsframe,text="On Screen Display")
+osdLabel.grid(row=6, column=0, sticky='NEW')
+osdCheck = ttk.Checkbutton(optionsframe,var=osdvar)
+osdCheck.grid(row=6, column=1, sticky='NEW')
+
+switchCountvar = tk.StringVar()
+switchCountvar.set('0')
+switchCountLabel = ttk.Label(optionsframe,text="Switch timer (seconds)")
+switchCountLabel.grid(row=7, column=0, sticky='NESW')
+switchCountspin = ttk.Spinbox(optionsframe,textvariable=switchCountvar,increment=1, from_=1, to=float('inf'))
+switchCountspin.grid(row=7, column=1, sticky='NESW')
+
+def osdvischange(*args):
+    for iplayer in players:
+        if osdvar.get():
+            iplayer.command('script-message','osd_mode','auto')
+        else:
+            iplayer.command('script-message','osd_mode','never')
+    config['showOSD'] = osdvar.get()
+
+osdvar.trace('w',osdvischange)
+osdvar.set(config.get('showOSD',True))
 
 def initialseekchange(*args):
-    player.start = initialseekpcvar.get()+'%'
     for iplayer in players:
-        iplayer.start = initialseekpcvar.get()+'%'
+        if initialseekpcvar.get() == '-1':
+            iplayer.start = str(random.randint(0,100))+'%'
+        else:
+            player.start = initialseekpcvar.get()+'%'
     config['initialSeekOffset'] = initialseekpcvar.get()
 
 initialseekpcvar.trace('w',initialseekchange)
@@ -410,10 +439,31 @@ leftFramepcvar.set(config.get('leftWidth',0.25)*100)
 sidewindowexpanded  = False
 lowerwindowexpanded = False
 
+afterid = None
+
+def hideCursors():
+    for ipf in playerFrames:
+        try:
+            ipf.configure(cursor='none')
+        except Exception as e:
+            print(e)
+
 def rootmotion(e):
     global sidewindowexpanded
     global lowerwindowexpanded
     global player
+    global afterid
+
+    for ipf in playerFrames:
+        try:
+            ipf.configure(cursor='@custom.cur')
+        except:
+            ipf.configure(cursor='crosshair')
+
+    if afterid is not None:
+        root.after_cancel(afterid)
+
+    afterid = root.after(800,hideCursors)
 
     leftwidth = config.get('leftWidth',0.25) 
     rightwidth = config.get('rightWidth',0.25)
@@ -455,13 +505,12 @@ def rootmotion(e):
             if e.type == tk.EventType.ButtonPress:
                 playerframe.configure(style="borderhilight.TFrame")
                 try:
-                    player.command('script-message','osd_message',f'')
+                    player.command('script-message','osd_defocus')
                 except Exception as e:
                     pass
                 player = iplayer
-                player.command('script-message','osd_message',f'<PLAYER SELECTED>')
+                player.command('script-message','osd_focus')
             iplayer.command('script-message','osd_rootmotion')
-
 
 root.bind('<Motion>',rootmotion)
 root.bind('<Button-1>',rootmotion)
@@ -480,11 +529,10 @@ def scrollfunc(e):
         if e.widget == playerframe:
             playerframe.configure(style="borderhilight.TFrame")
             try:
-                player.command('script-message','osd_message',f'')
+                player.command('script-message','osd_defocus')
             except Exception as e:
                 pass
             player = iplayer
-            player.command('script-message','osd_message',f'<PLAYER SELECTED>')
 
             if ctrl:
                 if e.delta > 0:
@@ -539,6 +587,7 @@ def playerDimsChange(*args):
         x,y = int(xplayerCountvar.get()),int(yplayerCountvar.get())
     except Exception as e:
         print(e)
+        return
 
     if x < 1:
         x=1
@@ -594,9 +643,8 @@ def playerDimsChange(*args):
 
     root.after(1,reapPlayers)
 
-
     while len(playerFrames) < targetcount:
-        tempPlayer = ttk.Frame(framemain,padding=0,borderwidth=0,relief='flat')
+        tempPlayer = ttk.Frame(framemain,padding=0,borderwidth=0,relief='flat',cursor='crosshair')
         tempPlayer.grid(row=0, column=0, sticky='nsew')
         tempPlayer.bind('<Button-1>',playerclick)
 
@@ -607,18 +655,28 @@ def playerDimsChange(*args):
 
         playerFrames.append(tempPlayer)
 
+        initialseek = initialseekpcvar.get()
+        if initialseek == '-1':
+            initialseek = str(random.randint(0,100))
+
+        visopt = ''
+        if osdvar.get():
+            visopt = ',osc-visibility=auto'
+        else:
+            visopt = ',osc-visibility=never'
+
         tempplayer = mpv.MPV(wid=tempPlayer.winfo_id(),
                          osc=True,
                          volume=40,
                          osd_on_seek='msg-bar',
-                         script_opts='osc-layout=box,osc-seekbarstyle=knob',
+                         script_opts='osc-layout=box,osc-seekbarstyle=knob'+visopt,
                          input_default_bindings=True,
                          input_vo_keyboard=True,
                          input_terminal=True,
                          scripts='osd.lua',
                          mute=True,
                          panscan=1 if panScanvar.get() else 0,
-                         start=initialseekpcvar.get()+'%',
+                         start=initialseek+'%',
                          loop_file='inf')
 
         tempplayer.observe_property('duration', propertyChange)
@@ -901,11 +959,36 @@ def item_selected(event):
         item = tree.item(selected_item)
         path,_,_,_,_ = item['values']
         if path != currentFile:
+            initialseek = initialseekpcvar.get()
+            if initialseek == '-1':
+                initialseek = str(random.randint(0,100))
+                player.start = initialseek+'%'
+            undolog.setdefault(id(player),[]).append((currentFile,player.time_pos))
             player.play(path)
+            player.video_pan_x=0
+            player.video_pan_y=0
+            player.video_scale_x = 1 
+            player.video_scale_y = 1
         break
 
 tree.bind('<<TreeviewSelect>>', item_selected)
 
+
+def drag(event):    
+    x=event.x_root
+    y=event.y_root
+    targetwidget = root.winfo_containing(x,y)
+
+    if targetwidget != event.widget and targetwidget in playerFrames and event.widget in playerFrames:
+
+        sourceinfo  = event.widget.grid_info()
+        target_info = targetwidget.grid_info()
+        targetwidget.grid(**sourceinfo)
+        event.widget.grid(**target_info)
+
+
+
+root.bind("<B1-Motion>", drag)
 
 
 searchvar.trace('w', lambda nm, idx, mode: dosearch())
@@ -958,6 +1041,31 @@ def videoRandom(restrictions=None):
     except Exception as e:
         print(e)
 
+switchplayerind = 0
+switchclock = 0
+
+def switchFunc():
+    global switchplayerind,switchclock,player
+    while 1:
+        try:
+            time.sleep(0.1)
+            switchCount = abs(int(float(switchCountvar.get())*10))
+            if switchCount > 0 and len(players)>0:
+                if switchclock%switchCount == 0:
+                    player.command('script-message','osd_defocus')
+                    player = players[switchplayerind%len(players)]
+                    videoRandom()
+                    player.command('script-message','osd_focus')
+                    switchplayerind+=1
+                switchclock+=1
+                switchclock = switchclock%switchCount
+        except Exception as e:
+            print(e)
+
+switchthread = threading.Thread(target=switchFunc,daemon=True)
+switchthread.start()
+
+
 def videoDownvote(skip=False):
     try:
         fn,score,pc,cdate,size = tree.item(currentFile, 'values')
@@ -990,7 +1098,13 @@ def videoUpvote(skip=False):
     if skip:
         playlist_next()
 
-root.bind('<Button-2>',lambda x:playlist_prev())
+def middlerandom(e):
+    print(e.widget)
+    if e.widget in playerFrames:
+        player = players[playerFrames.index(e.widget)] 
+        videoRandom()
+
+root.bind('<Button-2>',middlerandom)
 root.bind('<Button-3>',lambda x:playlist_next())
 
 
@@ -1010,12 +1124,74 @@ def keyfunc(e):
 
     seekpoints = [str(x) for x in range(1,9)]
 
+
     if e.keysym in seekpoints:
         ind = (seekpoints.index(e.keysym)/(len(seekpoints)))*100
+        player.command('script-message','osd_defocus')
         player.command('seek',str(ind),'absolute-percent')
+    elif e.keysym.lower() == 'b':
+        try:
+            fn,tp = undolog.get(id(player),[]).pop()
+            player.start = tp
+            player.play(fn)
+            player.time_pos = tp
+            player.video_pan_x=0
+            player.video_pan_y=0
+            player.video_scale_x = 1 
+            player.video_scale_y = 1
+        except Exception as e:
+            print(e)
+    elif e.keysym.lower() == 'minus':
+        pf = playerFrames[players.index(player)]
+        grid_info = pf.grid_info()
+        row = grid_info['row']
+        col = grid_info['column']
+        roww = pf.master.rowconfigure(row)['weight']
+        colw = pf.master.columnconfigure(col)['weight']
+        pf.master.rowconfigure(row,weight=max(1,roww-1))
+        pf.master.columnconfigure(col,weight=max(1,colw-1))
+    elif e.keysym.lower() == 'equal':
+        pf = playerFrames[players.index(player)]
+        grid_info = pf.grid_info()
+        row = grid_info['row']
+        col = grid_info['column']
+        roww = pf.master.rowconfigure(row)['weight']
+        colw = pf.master.columnconfigure(col)['weight']
+        pf.master.rowconfigure(row,weight=roww+1)
+        pf.master.columnconfigure(col,weight=colw+1)
+    elif e.keysym.lower() == 'plus':
+        pf = playerFrames[players.index(player)]
+        grid_info = pf.grid_info()
+        row = grid_info['row']
+        col = grid_info['column']
+        pf.master.rowconfigure(row,weight=1)
+        pf.master.columnconfigure(col,weight=1)
+    elif e.keysym.lower() == 'slash':
+        player.video_pan_x = 0.0
+        player.video_pan_y = 0.0
+        player.video_scale_x = 1 
+        player.video_scale_y = 1
+    elif e.keysym.lower() == 'left':
+        player.video_pan_x += 0.01
+    elif e.keysym.lower() == 'right':
+        player.video_pan_x -= 0.01
+    elif e.keysym.lower() == 'down':
+        if ctrl:
+            player.video_scale_x -= 0.05
+            player.video_scale_y -= 0.05
+        else:
+            player.video_pan_y -= 0.01
+    elif e.keysym.lower() == 'up':
+        if ctrl:
+            player.video_scale_x += 0.05
+            player.video_scale_y += 0.05
+        else:
+            player.video_pan_y += 0.01
     elif e.keysym.lower() == 'a':
+        player.command('script-message','osd_defocus')
         player.command('seek',str(-offset),'relative')
     elif e.keysym.lower() == 'd':
+        player.command('script-message','osd_defocus')
         player.command('seek',str(offset),'relative')
     elif e.keysym.lower() == 'q':
         root.destroy()
@@ -1023,6 +1199,7 @@ def keyfunc(e):
         panScanvar.set(not panScanvar.get())
     elif e.keysym.lower() == 'm':
         for iplayer in players:
+            player.command('script-message','osd_defocus')
             iplayer.mute = not iplayer.mute
             vol = iplayer.volume
             if iplayer.mute:
@@ -1034,13 +1211,17 @@ def keyfunc(e):
             tempplayer = player
             restrictions = []
             for iplayer in players:
+                iplayer.command('script-message','osd_defocus')
                 player = iplayer
                 item_selected(videoRandom(restrictions=restrictions))
         else:
+            player.command('script-message','osd_defocus')
             videoRandom()
     elif e.keysym.lower() == 'e':
+        player.command('script-message','osd_defocus')
         playlist_next()
     elif e.keysym.lower() == 'w':
+        player.command('script-message','osd_defocus')
         playlist_prev()
     elif e.keysym.lower() == 'y':
         videoUpvote(skip=ctrl)
@@ -1072,11 +1253,11 @@ def keyfunc(e):
         except Exception as e:
             print(e)
         try:
-            player.command('script-message','osd_message',f'')
+            player.command('script-message','osd_defocus')
         except Exception as e:
             pass
         player = players[(ind-1)%len(players)]
-        player.command('script-message','osd_message',f'<PLAYER SELECTED>')
+        player.command('script-message','osd_focus')
     elif e.keysym == 'period':
         ind = 0
         try:
@@ -1084,11 +1265,11 @@ def keyfunc(e):
         except Exception as e:
             print(e)
         try:
-            player.command('script-message','osd_message',f'')
+            player.command('script-message','osd_defocus')
         except Exception as e:
             pass
         player = players[(ind+1)%len(players)]
-        player.command('script-message','osd_message',f'<PLAYER SELECTED>')
+        player.command('script-message','osd_focus')
 
 
 framemain.bind('<KeyPress>',keyfunc)

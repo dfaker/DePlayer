@@ -2952,11 +2952,91 @@ function osd_message(text)
     show_message(text,1)
 end
 
+local ov = mp.create_osd_overlay('ass-events')
+local overlaytext = ""
+local timer = 0
+local osdtimer = mp.add_periodic_timer(0.2, function()
+    timer = timer-1
+    if timer <= 0 then
+        ov:remove()
+        timer=0
+    end
+
+    if timer > 0 and timer % 2 == 0 then 
+        ov.data = overlaytext
+        ov:update()
+    else
+        ov.data = ""
+        ov:update()
+    end
+end)
+
+local ass_set_color = function (idx, color)
+    assert(color:len() == 8 or color:len() == 6)
+    local ass = ""
+    -- Set alpha value (if present)
+    if color:len() == 8 then
+        local alpha = 0xff - tonumber(color:sub(7, 8), 16)
+        ass = ass .. string.format("\\%da&H%X&", idx, alpha)
+    end
+    -- Swizzle RGB to BGR and build ASS string
+    color = color:sub(5, 6) .. color:sub(3, 4) .. color:sub(1, 2)
+    return "{" .. ass .. string.format("\\%dc&H%s&", idx, color) .. "}"
+end
+
+function focus_hint()
+
+    local osd_w, osd_h = mp.get_property("osd-width"), mp.get_property("osd-height")
+    timer = 10
+    ov.res_x = osd_w
+    ov.res_y = osd_h
+
+    local p1x = 5
+    local p1y = 5
+    local p2x = osd_w-5
+    local p2y = osd_h-5
+
+    ass = assdraw.ass_new()
+    ass:new_event()
+    ass:draw_start()
+    ass:pos(0, 0)
+
+    ass:append(ass_set_color(1, "69bfdbFF"))
+    ass:append(ass_set_color(3, "00000000"))
+
+    local l = math.min(tonumber(p1x), tonumber(p2x))
+    local r = math.max(tonumber(p1x), tonumber(p2x))
+    local u = math.min(tonumber(p1y), tonumber(p2y))
+    local d = math.max(tonumber(p1y), tonumber(p2y))
+
+    ass:rect_cw(0, 0, l, osd_h)
+    ass:rect_cw(r, 0, osd_w, osd_h)
+    ass:rect_cw(l, 0, r, u)
+    ass:rect_cw(l, d, r, osd_h)
+
+    ass:draw_stop()
+    ass:pos(0, 0)
+
+    ov.data = ass.text
+    overlaytext = ass.text
+    osdtimer:kill()
+    ov:update()
+    osdtimer:resume()
+end
+
+
+function focus_hint_remove()
+    timer=0
+    ov:remove()
+end
 
 
 mp.register_event("seek", seek_handler)
 mp.register_event("start-file", seek_handler)
 
 mp.register_script_message("osd_rootmotion",  seek_handler)
-mp.register_script_message("osd_message",  osd_message)
+mp.register_script_message("osd_message",     osd_message)
+mp.register_script_message("osd_mode",        visibility_mode)
+mp.register_script_message("osd_focus",       focus_hint)
+mp.register_script_message("osd_defocus",       focus_hint_remove)
 
