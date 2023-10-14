@@ -1,4 +1,5 @@
 import os
+import subprocess as sp
 import shutil
 import tkinter as tk
 from tkinter import filedialog
@@ -11,7 +12,7 @@ import time
 
 undolog = {}
 
-RELEASE_NUMVER = 'v0.1'
+RELEASE_NUMVER = 'v1.3'
 
 config = {'sourceDirs':[]}
 
@@ -58,11 +59,7 @@ root.style.configure ("TNotebook.Tab.Label",color='white',foreground='white',bac
 root.style.configure ("TNotebook.label",color='white',foreground='white',background='#0f0f0f',bordercolor='#0f0f0f',highlightbackground='#0f0f0f',lightcolor='#0f0f0f')
 root.style.configure ("TNotebook.Pane",color='white',foreground='white',background='#0f0f0f',bordercolor='#0f0f0f',highlightbackground='#0f0f0f')
 root.style.configure ("TLabel",color='white',foreground='white',background='#0f0f0f')
-
 root.style.configure ("TFrame",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f',highlightbackground='#0f0f0f')
-
-root.style.configure ("borderhilight.TFrame",color='#69bfdb',relief ='FLAT',borderwidth=50,foreground='#69bfdb',background='#69bfdb',bordercolor='#69bfdb',highlightbackground='#0f0f0f',padx='20')
-
 root.style.configure ("TLabelframe",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f',highlightbackground='#0f0f0f',relief='flat')
 root.style.configure ("TLabelframe.Label",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f')
 root.style.configure ("TLabelframe.Frame",color='white',foreground='white',background='#0f0f0f',bordercolor='#1f1f1f',highlightbackground='#0f0f0f')
@@ -75,7 +72,6 @@ root.style.configure ("TMenubutton",color='white',foreground='white',background=
 root.style.configure ("TSpinbox",color='white',foreground='white',fieldbackground='#1f1f1f',background='#0f0f0f',bordercolor='darkgrey',buttonbackground='white')
 root.style.configure ("TEntry",color='white',foreground='white',fieldbackground='#1f1f1f',background='#0f0f0f',bordercolor='darkgrey')
 root.style.configure ("TCombobox",color='white',foreground='white',fieldbackground='#0f0f0f',background='#0f0f0f',bordercolor='#0f0f0f')
-
 root.style.configure ("Treeview",color='white',foreground='white',fieldbackground='#0f0f0f',background='#0f0f0f',bordercolor='#0f0f0f')
 
 
@@ -126,7 +122,6 @@ class watchedPath(tk.Frame):
         self.label.pack(anchor="nw", side="left", expand=True, fill='x')
         self.rembutton.pack(anchor="nw", side="right", expand=False, fill='x')
 
-
         self.pathframe.pack(anchor="sw", side="top", expand=False, fill='x')
 
         self.optionframe = ttk.Frame(self)
@@ -150,6 +145,36 @@ class watchedPath(tk.Frame):
         watchedPaths.remove(self)
         self.destroy()
 
+class watchedPlaylist(tk.Frame):
+    def __init__(self, path, master):
+
+        ttk.Frame.__init__(self, master)
+
+        self.master=master
+        self.path = path
+
+        self.configure(relief='raised', border=1, borderwidth=1)
+
+        self.pathframe = ttk.Frame(self)
+
+        self.label = ttk.Label(self.pathframe,text=path)
+        self.rembutton = ttk.Button(self.pathframe,text='Remove Path', command=self.rem)
+
+        self.label.pack(anchor="nw", side="left", expand=True, fill='x')
+        self.rembutton.pack(anchor="nw", side="right", expand=False, fill='x')
+
+        self.pathframe.pack(anchor="sw", side="top", expand=False, fill='x')
+
+        self.optionframe = ttk.Frame(self)
+
+        self.optionframe.pack(anchor="sw", side="bottom", expand=True, fill='x')
+
+    def rem(self):
+        config['sourceDirs'].remove(self.path)
+        watchedPaths.remove(self)
+        self.destroy()
+
+
 pathsFrame = ttk.LabelFrame(optionsframe,text='Watched Paths:', padding=8, relief='raised')
 
 def addPath():
@@ -162,6 +187,16 @@ def addPath():
             watchedPaths.append(wp)
             config['sourceDirs'].append(folder_selected)
 
+def addPlaylist():
+    pl_selected = filedialog.askopenfilename()
+    if pl_selected is not None and len(pl_selected)>0:
+        pl_selected = os.path.normpath(pl_selected)
+        if os.path.exists(pl_selected) and pl_selected not in config['sourceDirs']:
+            wp = watchedPlaylist(pl_selected,pathsFrame)
+            wp.pack(anchor="n", side="top", expand='true',fill='x')
+            watchedPaths.append(wp)
+            config['sourceDirs'].append(pl_selected)
+
 
 for path in config['sourceDirs']:
     wp = watchedPath(path,pathsFrame)
@@ -169,8 +204,6 @@ for path in config['sourceDirs']:
     watchedPaths.append(wp)
 
 pathsFrame.grid(row=20, column=0, columnspan=2, sticky='NESW', pady=16)
-
-
 
 notebook.add(listingframe, text='Library')
 notebook.add(optionsframe, text='Options')
@@ -216,8 +249,8 @@ def normsort(v):
             pass
     return v
 
-lastsortcol = columns[0]
-lastreverse = False
+lastsortcol = config.get('lastsortcol',columns[0])
+lastreverse = config.get('lastsortReversed',False)
 def sorttree(col=None,reverse=False):
     global lastsortcol
     global lastreverse
@@ -228,16 +261,24 @@ def sorttree(col=None,reverse=False):
         col = lastsortcol
         reverse = lastreverse
         reverseafter = False
-    
+
+    config['lastsortcol']=col
+    config['lastsortReversed']=reverse
+
     lastsortcol = col
     lastreverse  = reverse
 
-    l = [(tree.set(k, col), k) for k in tree.get_children('')]
-    l.sort(key=normsort,reverse=reverse)
+    if col == 'random':
+        l = [(tree.set(k, 'filename'), k) for k in tree.get_children('')]
+        random.shuffle(l)
+    else:
+        l = [(tree.set(k, col), k) for k in tree.get_children('')]
+        l.sort(key=normsort,reverse=reverse)
+    
     for index, (val, k) in enumerate(l):
         tree.move(k, '', index)
 
-    if reverseafter:
+    if col != 'random' and reverseafter:
         tree.heading(col, command=lambda: sorttree(col, not reverse))
 
 tree.heading('filename', text='Filename', command = lambda c='filename': sorttree(c,False) )
@@ -245,7 +286,6 @@ tree.heading('score', text='Score', command = lambda c='score': sorttree(c,False
 tree.heading('playcount', text='Playcount', command = lambda c='playcount': sorttree(c,False) )
 tree.heading('createddate', text='Created', command = lambda c='createddate': sorttree(c,False) )
 tree.heading('size', text='Size', command = lambda c='size': sorttree(c,False) )
-
 
 tree.grid(row=1, column=0, sticky='nsew')
 tree.column("score", minwidth=60, width=60, stretch='NO')
@@ -269,17 +309,21 @@ playerFrames.append(tempPlayer)
 
 player = mpv.MPV(wid=playerFrames[0].winfo_id(),
                  osc=True,
-                 volume=40,
+                 volume=config.get('initialvolume',60),
+                 ytdl=True,
                  osd_on_seek='msg-bar',
-                 script_opts='osc-layout=box,osc-seekbarstyle=knob',
+                 script_opts='osc-layout=box,osc-seekbarstyle=knob,ytdl_hook-ytdl_path=yt-dlp.exe',
                  input_default_bindings=True,
                  input_vo_keyboard=True,
                  input_terminal=True,
                  scripts='osd.lua',
-                 mute=True,
-                 loop_file='inf')
+                 keep_open=True,
+                 loop_file='inf',
+                 mute=True)
 
 players = [player]
+
+
 
 optionsframe.columnconfigure(0, weight=1)
 optionsframe.columnconfigure(1, weight=1)
@@ -342,6 +386,7 @@ yplayerCountspin.grid(row=3, column=1, sticky='NESW')
 layouts = [
     "Grid",
     "Grid",
+    "Circle Pack",
     "Big Middle Grid",
     "Vert Stripe Grid",
     "Horiz Stripe Grid",
@@ -374,6 +419,66 @@ switchCountLabel.grid(row=7, column=0, sticky='NESW')
 switchCountspin = ttk.Spinbox(optionsframe,textvariable=switchCountvar,increment=1, from_=1, to=float('inf'))
 switchCountspin.grid(row=7, column=1, sticky='NESW')
 
+loopsingleVar = tk.BooleanVar()
+loopsingleVar.set(config.get('loopSingle',True))
+loopsingleLabel = ttk.Label(optionsframe,text="Loop File")
+loopsingleLabel.grid(row=8, column=0, sticky='NEW')
+loopsingleCheck = ttk.Checkbutton(optionsframe,var=loopsingleVar)
+loopsingleCheck.grid(row=8, column=1, sticky='NEW')
+
+speedvar = tk.StringVar()
+speedvar.set('1')
+speedLabel = ttk.Label(optionsframe,text="Playback speed")
+speedLabel.grid(row=9, column=0, sticky='NESW')
+speedspin = ttk.Spinbox(optionsframe,textvariable=speedvar,increment=0.05, from_=0, to=50)
+speedspin.grid(row=9, column=1, sticky='NESW')
+
+
+editorVar = tk.StringVar()
+editorVar.set( '|'.join(config.get('editor',[])) )
+edtiorLabel = ttk.Label(optionsframe,text="External Editor")
+edtiorLabel.grid(row=10, column=0, sticky='NESW')
+edtiorEntry = ttk.Entry(optionsframe,textvariable=editorVar)
+edtiorEntry.grid(row=10, column=1, sticky='NESW')
+
+editorcwdVar = tk.StringVar()
+editorcwdVar.set( config.get('editor_cwd',''))
+edtiorcwdLabel = ttk.Label(optionsframe,text="External Editor CWD")
+edtiorcwdLabel.grid(row=11, column=0, sticky='NESW')
+edtiorcwdEntry = ttk.Entry(optionsframe,textvariable=editorcwdVar)
+edtiorcwdEntry.grid(row=11, column=1, sticky='NESW')
+
+
+def editorChange(*args):
+    config['editor'] = editorVar.get().split('|')
+editorVar.trace('w',editorChange)
+
+def edtitorcwdChange(*args):
+    config['editor_cwd'] = editorcwdVar.get()
+editorcwdVar.trace('w',edtitorcwdChange)
+
+
+
+def speedchange(*args):
+    try:
+        newspeed = str(float(speedvar.get()))
+        for p in players:
+            p.speed = newspeed
+    except:
+        pass
+
+speedvar.trace('w',speedchange)
+
+def loopsinglechange(*args):
+    for player in players:
+        if loopsingleVar.get():
+            player.loop_file ='inf'
+        else:
+            player.loop_file = 'no'
+
+loopsingleVar.trace('w',loopsinglechange)
+
+
 def osdvischange(*args):
     for iplayer in players:
         if osdvar.get():
@@ -387,10 +492,13 @@ osdvar.set(config.get('showOSD',True))
 
 def initialseekchange(*args):
     for iplayer in players:
-        if initialseekpcvar.get() == '-1':
-            iplayer.start = str(random.randint(0,100))+'%'
-        else:
-            player.start = initialseekpcvar.get()+'%'
+        try:
+            if initialseekpcvar.get() == '-1':
+                iplayer.start = str(random.randint(0,100))+'%'
+            else:
+                player.start = initialseekpcvar.get()+'%'
+        except Exception as e:
+            print(e)
     config['initialSeekOffset'] = initialseekpcvar.get()
 
 initialseekpcvar.trace('w',initialseekchange)
@@ -405,6 +513,16 @@ initialscanvar.set(bool(config.get('scanAtStartup',True)))
 layoutvar.set(str(config.get('layout',layouts[0])))
 xplayerCountvar.set(int(config.get('xplayerwindows',1)))
 yplayerCountvar.set(int(config.get('yplayerwindows',1)))
+
+def randomseekonPlaybackEnd(sourceplayer,name,value):
+    global player
+    ()
+    if value == True:
+        player = sourceplayer
+        videoRandom()
+        player.pause=False
+
+player.observe_property('eof-reached',lambda n,e,p=player:randomseekonPlaybackEnd(p,n,e) )
 
 
 from itertools import product
@@ -503,13 +621,13 @@ def rootmotion(e):
     for playerframe,iplayer in zip(playerFrames,players):
         if e.widget == playerframe:
             if e.type == tk.EventType.ButtonPress:
-                playerframe.configure(style="borderhilight.TFrame")
                 try:
                     player.command('script-message','osd_defocus')
                 except Exception as e:
                     pass
                 player = iplayer
-                player.command('script-message','osd_focus')
+                if len(players)>1:
+                    player.command('script-message','osd_focus')
             iplayer.command('script-message','osd_rootmotion')
 
 root.bind('<Motion>',rootmotion)
@@ -527,23 +645,20 @@ def scrollfunc(e):
 
     for playerframe,iplayer in zip(playerFrames,players):
         if e.widget == playerframe:
-            playerframe.configure(style="borderhilight.TFrame")
-            try:
-                player.command('script-message','osd_defocus')
-            except Exception as e:
-                pass
             player = iplayer
-
-            if ctrl:
-                if e.delta > 0:
-                    playlist_prev()
+            try:
+                if ctrl:
+                    if e.delta > 0:
+                        playlist_prev()
+                    else:
+                        playlist_next()                
                 else:
-                    playlist_next()                
-            else:
-                if e.delta > 0:
-                    iplayer.command('seek',str(offset),'relative')
-                else:
-                    iplayer.command('seek',str(-offset),'relative')
+                    if e.delta > 0:
+                        iplayer.command('seek',str(offset),'relative')
+                    else:
+                        iplayer.command('seek',str(-offset),'relative')
+            except Exception as e:
+                print(e)
 
 playerFrames[0].bind('<MouseWheel>',scrollfunc)
 framemain.bind('<MouseWheel>',scrollfunc)
@@ -580,8 +695,13 @@ player.observe_property('path', propertyChange)
 
 dimsstartup = True
 
+def playersortFunc(pair):
+    gi = pair[0].grid_info()
+    return gi['row'],gi['column']
+
+
 def playerDimsChange(*args):
-    global playerFrames, players, currentFile
+    global playerFrames, players, currentFile, player
     x,y = 1,1
     try:
         x,y = int(xplayerCountvar.get()),int(yplayerCountvar.get())
@@ -590,7 +710,7 @@ def playerDimsChange(*args):
         return
 
     if x < 1:
-        x=1
+        x = 1
 
     if y < 1:
         y = 1
@@ -616,6 +736,8 @@ def playerDimsChange(*args):
         targetcount = (y*2) + 1
     elif layoutname == "Horiz Stripe Grid" and y>2:
         targetcount = (x*2) + 1
+    elif layoutname == 'Circle Pack':
+        targetcount = x*y
     else:
         layoutname = 'Grid'
 
@@ -632,13 +754,20 @@ def playerDimsChange(*args):
     def reapPlayers():
         for p in playersToReap:
             try:
+                p.stop()
+            except Exception as e:
+                print(e)
+            
+            try:
                 p.terminate()
             except Exception as e:
                 print(e)
+            
             try:
                 del p
             except Exception as e:
                 print(e)
+        
         playersToReap.clear()
 
     root.after(1,reapPlayers)
@@ -659,35 +788,41 @@ def playerDimsChange(*args):
         if initialseek == '-1':
             initialseek = str(random.randint(0,100))
 
-        visopt = ''
-        if osdvar.get():
-            visopt = ',osc-visibility=auto'
-        else:
-            visopt = ',osc-visibility=never'
 
         tempplayer = mpv.MPV(wid=tempPlayer.winfo_id(),
                          osc=True,
-                         volume=40,
+                         volume=config.get('initialvolume',60),
+                         ytdl=True,
                          osd_on_seek='msg-bar',
-                         script_opts='osc-layout=box,osc-seekbarstyle=knob'+visopt,
+                         script_opts='osc-layout=box,osc-seekbarstyle=knob,ytdl_hook-ytdl_path=yt-dlp.exe',
                          input_default_bindings=True,
                          input_vo_keyboard=True,
                          input_terminal=True,
                          scripts='osd.lua',
                          mute=True,
+                         speed=speedvar.get(),
                          panscan=1 if panScanvar.get() else 0,
                          start=initialseek+'%',
-                         loop_file='inf')
+                         keep_open=True,
+                         loop_file='inf' if loopsingleVar.get() else 'no')
+
+        if osdvar.get():
+            tempplayer.command('script-message','osd_mode','auto')
+        else:
+            tempplayer.command('script-message','osd_mode','never')
 
         tempplayer.observe_property('duration', propertyChange)
         tempplayer.observe_property('path', propertyChange)
+        tempplayer.observe_property('eof-reached',lambda n,e,p=tempplayer:randomseekonPlaybackEnd(p,n,e) )
 
         players.append(tempplayer)
 
         if not dimsstartup:
             if currentFile is not None:
+                print('playing',currentFile)
                 tempplayer.play(currentFile)
             else:
+                print('playing',config['lastPlayed'])
                 tempplayer.play(config['lastPlayed'])
 
     coords = []
@@ -711,6 +846,7 @@ def playerDimsChange(*args):
             pass
 
         coords.append((1,1,x-2,y-2))
+
     elif layoutname == "Vert Stripe Grid":
         for yi in range(0,y):
             for xi in range(0,x):
@@ -755,6 +891,13 @@ def playerDimsChange(*args):
             tempPlayer.grid(row=yi, column=xi, rowspan=spany, columnspan=spanx, sticky='nsew')
         except Exception as e:
             print(e)
+
+    tplayerFrames,tplayers = zip(*sorted(zip(playerFrames, players),key=playersortFunc))
+
+    playerFrames = list(tplayerFrames)
+    players = list(tplayers)
+    if player not in players:
+        player = players[0]
 
 
 xplayerCountvar.set(min(int(config.get('xplayerwindows',1)),4))
@@ -811,10 +954,31 @@ comparatorsymbols = sorted(comparatorFuncs.keys(),key=lambda x:len(x),reverse=Tr
 
 currentFile=''
 
-def dosearch():
-    needle = search.get()
+def savesearch():
+    config['lastSearch'] = searchvar.get()
+    dosearch()
+
+lastSearch = None
+
+def dosearch(force=False):
+    global lastSearch
+
+    needle = searchvar.get()
+    print('dosearch',needle)
+    if not force and lastSearch == needle:
+        return
     
-    needles = [x.strip().upper() for x in needle.split(' ') if x.strip() != '' and all(c not in x for c in comparatorsymbols)]
+    lastSearch = needle
+
+    needlesets = []
+    for orbranch in needle.split('||'):
+        orbranch = orbranch.strip()
+        needles = [x.strip().upper() for x in orbranch.split(' ') if x.strip() != '' and all(c not in x for c in comparatorsymbols)]
+        if len(needles) > 0:
+            needlesets.append(needles)
+    if len(needlesets) == 0:
+        needlesets = [[]]
+
     filters = [x.strip().upper() for x in needle.split(' ') if x.strip() != '' and any(c in x for c in comparatorsymbols)]
     filterset = {}
     for f in filters:
@@ -831,7 +995,7 @@ def dosearch():
         except Exception as e:
             print(e)
 
-    currentwillberemoved = not all([n in currentFile.upper() for n in needles])
+    currentwillberemoved = not any(all(n in currentFile.upper() for n in ns) for ns in needlesets)
 
     pldat = None
 
@@ -861,7 +1025,7 @@ def dosearch():
 
     for plf,pldat in pl:
 
-        if all([n in plf.upper() for n in needles]):
+        if any(all(n in plf.upper() for n in ns) for ns in needlesets):
             filtersPass = True
             for a,(c,b) in filterset.items():
                 try:
@@ -886,45 +1050,56 @@ def dosearch():
                 tree.selection_set(nextfile)
             except Exception as e:
                 print(e)
-
     sorttree()
+    root.update_idletasks()
 
 def rescan_async():
     global pl
     for directory in config['sourceDirs']:
-        for r,dl,fl in os.walk(directory):
-            for f in fl:
-                try:
-                    p = os.path.join(r,f)
-                    root.update_idletasks()
-                    tg = mimetypes.guess_type(p)
-                    if tg is not None and tg[0] is not None:
-                        if 'video' in tg[0]:
-                            if p not in foundVideos:
-                                stats = os.stat(p)
-                                foundVideos[p] = {'path':p,
-                                                  'size':stats.st_size,
-                                                  'playcount':0,
-                                                  'score':0,
-                                                  'createddate':stats.st_ctime,
-                                                  'size':stats.st_size,
-                                                  'sorcescandir':directory}
-                                players[0].command('script-message','osd_message',f'Added {p}')
-                        elif 'image' in tg[0]:
-                            pass
-                            #os.remove(p)
-                            #print('Removed',tg,p)
-                        else:
-                            pass
-                            #print('Bad',tg,p)
-                except Exception as e:
-                    print(e)
-            #if len(fl) == 0 and len(dl) == 0:
-            #    print('remdir',r)
-            #    os.rmdir(r)
+        if os.path.isfile(directory):
+            for line in open(directory,'r').readlines():
+                stats = os.stat(directory)
+                foundVideos[line] = {'path':line,
+                                  'size':0,
+                                  'playcount':0,
+                                  'score':0,
+                                  'createddate':stats.st_ctime,
+                                  'size':0,
+                                  'sorcescandir':directory}
+        else:
+            for r,dl,fl in os.walk(directory):
+                for f in fl:
+                    try:
+                        p = os.path.join(r,f)
+                        root.update_idletasks()
+                        tg = mimetypes.guess_type(p)
+                        if tg is not None and tg[0] is not None:
+                            if 'video' in tg[0]:
+                                if p not in foundVideos:
+                                    stats = os.stat(p)
+                                    foundVideos[p] = {'path':p,
+                                                      'size':stats.st_size,
+                                                      'playcount':0,
+                                                      'score':0,
+                                                      'createddate':stats.st_ctime,
+                                                      'size':stats.st_size,
+                                                      'sorcescandir':directory}
+                                    players[0].command('script-message','osd_message',f'Added {p}')
+                            elif 'image' in tg[0]:
+                                pass
+                                #os.remove(p)
+                                #print('Removed',tg,p)
+                            else:
+                                pass
+                                #print('Bad',tg,p)
+                    except Exception as e:
+                        print(e)
+                #if len(fl) == 0 and len(dl) == 0:
+                #    print('remdir',r)
+                #    os.rmdir(r)
 
     for k,v in list(foundVideos.items()):
-        if not os.path.exists(k):
+        if not os.path.exists(k) and not k.startswith('http'):
             try:
                 del foundVideos[k]
             except Exception as e:
@@ -936,7 +1111,7 @@ def rescan_async():
                 print(e)
 
     pl = sorted(list(foundVideos.items()))
-    dosearch()
+    dosearch(force=True)
 
 def rescan():
     root.after(1,rescan_async)    
@@ -948,10 +1123,15 @@ if config.get('scanAtStartup',False):
 pl = sorted(list(foundVideos.items()))
 
 pathsRescan = ttk.Button(pathsFrame,text='Rescan watched paths',command=rescan)
-pathsRescan.pack(anchor="s", side="bottom", expand='true',fill='x',pady=8)
+pathsRescan.pack(anchor="s", side="bottom", expand='true',fill='x',pady=1)
+
+pathsAdd = ttk.Button(pathsFrame,text='Add new web playlist',command=addPlaylist)
+pathsAdd.pack(anchor="s", side="bottom", expand='true',fill='x',pady=1)
 
 pathsAdd = ttk.Button(pathsFrame,text='Add new watched path',command=addPath)
-pathsAdd.pack(anchor="s", side="bottom", expand='true',fill='x',pady=8)
+pathsAdd.pack(anchor="s", side="bottom", expand='true',fill='x',pady=1)
+
+
 
 
 def item_selected(event):
@@ -964,11 +1144,13 @@ def item_selected(event):
                 initialseek = str(random.randint(0,100))
                 player.start = initialseek+'%'
             undolog.setdefault(id(player),[]).append((currentFile,player.time_pos))
+            print('playing',path)
             player.play(path)
             player.video_pan_x=0
             player.video_pan_y=0
             player.video_scale_x = 1 
             player.video_scale_y = 1
+            player.video_rotate=0
         break
 
 tree.bind('<<TreeviewSelect>>', item_selected)
@@ -990,10 +1172,8 @@ def drag(event):
 
 root.bind("<B1-Motion>", drag)
 
+searchvar.trace('w', lambda nm, idx, mode: savesearch())
 
-searchvar.trace('w', lambda nm, idx, mode: dosearch())
-
-dosearch()
 
 
 fsstate = True
@@ -1012,14 +1192,23 @@ def deleteallLowScore():
     global pl
     temppl = []
 
+    count = 0 
     for fn,dat in pl:
         if int(dat['score']) < 0:
             print('remove',fn,dat)
-            os.remove(fn)
+            try:
+                os.remove(fn)
+                count+=1
+                player.command('script-message','osd_message',f'{fn} deleted')
+
+            except Exception as e:
+                print(e)
         else:
             temppl.append((fn,dat))
     pl = temppl
     dosearch()
+    player.command('script-message','osd_message',f'{count} Files deleted')
+
 
 def videoRandom(restrictions=None):
     try:
@@ -1055,7 +1244,8 @@ def switchFunc():
                     player.command('script-message','osd_defocus')
                     player = players[switchplayerind%len(players)]
                     videoRandom()
-                    player.command('script-message','osd_focus')
+                    if len(players)>1:
+                        player.command('script-message','osd_focus')
                     switchplayerind+=1
                 switchclock+=1
                 switchclock = switchclock%switchCount
@@ -1066,34 +1256,19 @@ switchthread = threading.Thread(target=switchFunc,daemon=True)
 switchthread.start()
 
 
-def videoDownvote(skip=False):
+def videoVote(skip=False,increment=1):
     try:
         fn,score,pc,cdate,size = tree.item(currentFile, 'values')
-        tree.item(currentFile, values=(fn,str(int(score)-1),pc,cdate,size))
-    except Exception as e:
-        pass
-    
-    pldat = foundVideos.get(currentFile,{})
-    pldat['score'] = pldat.get('score',0)-1
-    score = pldat['score']
-    player.command('script-message','osd_message',f'Video score {score}')
-    dosearch()
-
-    if skip:
-        playlist_next()
-
-def videoUpvote(skip=False):
-    try:
-        fn,score,pc,cdate,size = tree.item(currentFile, 'values')
-        tree.item(currentFile, values=(fn,str(int(score)+1),pc,cdate,size))
+        tree.item(currentFile, values=(fn,str(int(score)+(increment)),pc,cdate,size))
     except Exception as e:
         pass
 
     pldat = foundVideos.get(currentFile,{})
-    pldat['score'] = pldat.get('score',0)+1
+    pldat['score'] = pldat.get('score',0)+(increment)
     score = pldat['score']
-    player.command('script-message','osd_message',f'Video score {score}')
-    dosearch()
+    count = len(tree.get_children(''))
+    player.command('script-message','osd_message',f'Video score {score} ({count})')
+    dosearch(force=True)
 
     if skip:
         playlist_next()
@@ -1107,11 +1282,52 @@ def middlerandom(e):
 root.bind('<Button-2>',middlerandom)
 root.bind('<Button-3>',lambda x:playlist_next())
 
+popout = None
+
+def commandBackToLastPlayed(keysym,shift,ctrl):
+    try:
+        fn,tp = undolog.get(id(player),[]).pop()
+        player.start = tp
+        print('playing',fn)
+        player.play(fn)
+        player.time_pos = tp
+        player.video_pan_x=0
+        player.video_pan_y=0
+        player.video_scale_x = 1 
+        player.video_scale_y = 1
+        player.video_rotate=0
+    except Exception as e:
+        print(e)
+
+def commandRotateClockwise(keysym,shift,ctrl):
+    pass
+
+def commandRotateAntiClockwise(keysym,shift,ctrl):
+    pass
+
+commandMap = {
+    'back-to-last-played':commandBackToLastPlayed,
+    'rotate-clockwise':commandRotateClockwise,
+    'rotate-anti-clockwise':commandRotateAntiClockwise,
+}
+
+def getBinding(binding,default):
+    return config.get('bindings',{}).get(binding,default)
+
+bindingsMap = {
+    'back-to-last-played':getBinding('back-to-last-played','b'),
+    'rotate-clockwise':'left',
+    'rotate-anti-clockwise':'right',
+}
 
 def keyfunc(e):
     global fsstate
     global player
     global currentFile
+    global popout
+
+    global players
+    global playerFrames
 
     offset = 10
     ctrl  = (e.state & 0x4) != 0
@@ -1130,17 +1346,7 @@ def keyfunc(e):
         player.command('script-message','osd_defocus')
         player.command('seek',str(ind),'absolute-percent')
     elif e.keysym.lower() == 'b':
-        try:
-            fn,tp = undolog.get(id(player),[]).pop()
-            player.start = tp
-            player.play(fn)
-            player.time_pos = tp
-            player.video_pan_x=0
-            player.video_pan_y=0
-            player.video_scale_x = 1 
-            player.video_scale_y = 1
-        except Exception as e:
-            print(e)
+        commandBackToLastPlayed(e.keysym,shift,ctrl)
     elif e.keysym.lower() == 'minus':
         pf = playerFrames[players.index(player)]
         grid_info = pf.grid_info()
@@ -1171,10 +1377,17 @@ def keyfunc(e):
         player.video_pan_y = 0.0
         player.video_scale_x = 1 
         player.video_scale_y = 1
+        player.video_rotate = 0
     elif e.keysym.lower() == 'left':
-        player.video_pan_x += 0.01
+        if ctrl:
+            player.video_rotate = abs((player.video_rotate+2)%360)
+        else:
+            player.video_pan_x += 0.01
     elif e.keysym.lower() == 'right':
-        player.video_pan_x -= 0.01
+        if ctrl:
+            player.video_rotate = abs((player.video_rotate-2)%360)
+        else:
+            player.video_pan_x -= 0.01
     elif e.keysym.lower() == 'down':
         if ctrl:
             player.video_scale_x -= 0.05
@@ -1190,9 +1403,17 @@ def keyfunc(e):
     elif e.keysym.lower() == 'a':
         player.command('script-message','osd_defocus')
         player.command('seek',str(-offset),'relative')
+        if ctrl:
+            for iplayer in players:
+                if iplayer != player:
+                    iplayer.command('seek',str(-offset),'relative')
     elif e.keysym.lower() == 'd':
         player.command('script-message','osd_defocus')
         player.command('seek',str(offset),'relative')
+        if ctrl:
+            for iplayer in players:
+                if iplayer != player:
+                    iplayer.command('seek',str(offset),'relative')
     elif e.keysym.lower() == 'q':
         root.destroy()
     elif e.keysym.lower() == 'g':
@@ -1207,6 +1428,7 @@ def keyfunc(e):
             else:
                 iplayer.command('script-message','osd_message',f'🔊 {vol}')
     elif e.keysym.lower() == 'r':
+        sorttree('random',False)
         if ctrl:
             tempplayer = player
             restrictions = []
@@ -1217,6 +1439,24 @@ def keyfunc(e):
         else:
             player.command('script-message','osd_defocus')
             videoRandom()
+    elif e.keysym.lower() == 'e' and ctrl:
+        cmd = []
+
+        editor = config.get('editor',[])
+        editorCwd = config.get('editor_cwd','.')
+
+        if type(editor) == list:
+            cmd += editor
+        else:
+            cmd += [editor]
+        cmd += [currentFile]
+
+        print(cmd)
+        print(editorCwd)
+
+        sp.Popen(cmd,cwd=editorCwd, start_new_session=True)
+        if shift:
+            root.destroy()
     elif e.keysym.lower() == 'e':
         player.command('script-message','osd_defocus')
         playlist_next()
@@ -1224,29 +1464,75 @@ def keyfunc(e):
         player.command('script-message','osd_defocus')
         playlist_prev()
     elif e.keysym.lower() == 'y':
-        videoUpvote(skip=ctrl)
+        increment=1
+        if shift:
+            increment=2
+        videoVote(skip=ctrl,increment=increment)
     elif e.keysym.lower() == 'u':
-        videoDownvote(skip=ctrl)
+        increment=-1
+        if shift:
+            increment=-2
+        videoVote(skip=ctrl,increment=increment)
+    elif e.keysym.lower() == 'f' and ctrl:
+        focusedplayer = player
+        playerind = players.index(focusedplayer)
+        focusedplayer = players.pop(playerind)
+        focusedframe = playerFrames.pop(playerind)
+
+        players = [focusedplayer]+players
+        playerFrames = [focusedframe]+playerFrames
+
+        while int(xplayerCountvar.get()) > 1:
+            xplayerCountvar.set(int(xplayerCountvar.get())-1)
+
+        while int(yplayerCountvar.get()) > 1:
+            yplayerCountvar.set(int(yplayerCountvar.get())-1)
+
     elif e.keysym.lower() == 'f':
         fsstate = not fsstate
         root.attributes('-fullscreen',fsstate)
     elif e.keysym == 'space':
         player.pause = not player.pause
+        if ctrl:
+            for iplayer in players:
+                iplayer.pause = player.pause
     elif e.keysym == '9':
-        player.volume -= 5
-        vol = player.volume
-        if player.mute:
-            player.command('script-message','osd_message',f'🔇 {vol}')
-        else:
-            player.command('script-message','osd_message',f'🔊 {vol}')
+        newvol = max(0,min(100,player.volume-5))
+        targetplayers = [player]
+        if ctrl:
+            config['initialvolume'] = newvol
+            targetplayers = players
+
+        for tplayer in targetplayers:
+            tplayer.volume = newvol
+            vol = tplayer.volume
+            if tplayer.mute:
+                tplayer.command('script-message','osd_message',f'🔇 {vol}')
+            else:
+                tplayer.command('script-message','osd_message',f'🔊 {vol}')
     elif e.keysym == '0':
-        player.volume += 5
-        vol = player.volume
-        if player.mute:
-            player.command('script-message','osd_message',f'🔇 {vol}')
+        newvol = max(0,min(100,player.volume+5))
+        
+        targetplayers = [player]
+        if ctrl:
+            config['initialvolume'] = newvol
+            targetplayers = players
+
+        for tplayer in targetplayers:
+            tplayer.volume = newvol
+            vol = tplayer.volume
+            if tplayer.mute:
+                tplayer.command('script-message','osd_message',f'🔇 {vol}')
+            else:
+                tplayer.command('script-message','osd_message',f'🔊 {vol}')
+        
+    elif e.keysym == 'c' and ctrl:
+        if popout is None:
+            popout = PopoutController(master=root)
         else:
-            player.command('script-message','osd_message',f'🔊 {vol}')
-    elif e.keysym == 'comma':
+            popout.destroy()
+            popout = None
+    elif e.keysym in ('z','comma'):
         ind = 0
         try:
             ind = players.index(player)
@@ -1257,8 +1543,9 @@ def keyfunc(e):
         except Exception as e:
             pass
         player = players[(ind-1)%len(players)]
-        player.command('script-message','osd_focus')
-    elif e.keysym == 'period':
+        if len(players)>1:
+            player.command('script-message','osd_focus')
+    elif e.keysym in ('c','period'):
         ind = 0
         try:
             ind = players.index(player)
@@ -1272,10 +1559,112 @@ def keyfunc(e):
         player.command('script-message','osd_focus')
 
 
+
+
 framemain.bind('<KeyPress>',keyfunc)
+
+class PopoutController(tk.Toplevel):
+    def __init__(self, master=None, *args):
+        tk.Toplevel.__init__(self, master)
+        self.master = master
+        
+        self.title('Popout Controller')
+        self.minsize(600,10)
+
+
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=0)
+        self.rowconfigure(1, weight=1)
+
+        self.attributes('-topmost', True)
+        self.update()
+
+        self.search = ttk.Entry(self,textvar=searchvar)
+        self.search.grid(row=0, column=0, sticky='new')
+
+        self.commandButton = ttk.Button(self,text='Click to Send Commands')
+        self.commandButton.grid(row=1, column=0, sticky='nsew')
+        self.commandButton.bind('<KeyPress>',keyfunc)
+
+        self.commandButton.bind('<MouseWheel>',self.mousewheel)
+
+        self.pushMessageVar = tk.StringVar()
+
+        self.pushMessage = ttk.Entry(self,textvar=self.pushMessageVar)
+        self.pushMessage.grid(row=2, column=0, sticky='new')
+
+        self.pushMessage.bind('<Return>',self.pushmessagetext)
+        self.template_instructions = """
+        a,d - Forward and back
+        w,e - Skip to next video
+        ",","." - Skip between cells
+        r - Random video
+        ctrl-r - All random videos
+        space - Pause
+        ctrl-space -  Pause all
+        ctrl-c -  Toggle popout
+        """.strip()
+       
+        self.instructions = ttk.Label(self,text="Hover for shortcuts")
+        self.instructions.grid(row=3, column=0, sticky='nsew')
+        self.overrideredirect(True)
+
+        xpos  = self.master.winfo_screenwidth()
+        self.geometry("+{}+0".format(int((xpos/2)-(600/2))))
+
+        self.instructions.bind('<Enter>',self.enterInstructions)
+        self.instructions.bind('<Leave>',self.exitInstructions)
+
+    def pushmessagetext(self,e):
+        print(e)
+        text = self.pushMessageVar.get()
+        player.play(text)
+        self.pushMessageVar.set('')
+
+    def enterInstructions(self,e):
+        self.instructions.configure(text=self.template_instructions)
+
+    def exitInstructions(self,e):
+        self.instructions.configure(text="Hover for shortcuts")
+
+    def mousewheel(self,e):
+        ctrl  = (e.state & 0x4) != 0
+        shift = (e.state & 0x1) != 0
+
+        o = lambda: None
+
+
+        if ctrl and e.delta > 0:
+            o.keysym = 'd'
+            o.state = 0
+            keyfunc(o)
+        elif ctrl and e.delta < 0:
+            o.keysym = 'a'
+            o.state = 0
+            keyfunc(o)
+        elif shift and e.delta > 0:
+            o.keysym = 'r'
+            o.state = 0
+            keyfunc(o)
+        elif shift and e.delta < 0:
+            o.keysym = 'r'
+            o.state = 0
+            keyfunc(o)
+        elif e.delta > 0:
+            o.keysym = 'period'
+            o.state = 0
+            keyfunc(o)
+        elif e.delta < 0:
+            o.keysym = 'comma'
+            o.state = 0
+            keyfunc(o)
+
 
 
 lastplayed = config.get('lastPlayed','NONE')
+
+searchvar.set(config.get('lastSearch',''))
 
 if len(players)>1 and len(config.get('filehist',[])) > 1:
     for p,f in zip(players,filehist[::-1]):
@@ -1305,10 +1694,10 @@ buttondel.grid(row=0, column=0, sticky='nesw')
 buttonprev  = ttk.Button(frameupper,text='< Prev',command=playlist_prev)
 buttonprev.grid(row=0, column=1, sticky='nesw')
 
-buttondownvote  = ttk.Button(frameupper,text='▼ Downvote',command=videoDownvote)
+buttondownvote  = ttk.Button(frameupper,text='▼ Downvote',command=lambda:videoVote(increment=-1))
 buttondownvote.grid(row=0, column=2, sticky='nesw')
 
-buttonupvote  = ttk.Button(frameupper,text='▲ Upvote',command=videoUpvote)
+buttonupvote  = ttk.Button(frameupper,text='▲ Upvote',command=lambda:videoVote(increment=1))
 buttonupvote.grid(row=0, column=3, sticky='nesw')
 
 buttonnext  = ttk.Button(frameupper,text='Next >',command=playlist_next)
