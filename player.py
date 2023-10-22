@@ -12,8 +12,8 @@ import time
 
 undolog = {}
 
-RELEASE_NUMVER = 'v1.3'
-
+RELEASE_NUMVER = 'v1.4'
+time_format = '%Y-%m-%d %H:%M'
 config = {'sourceDirs':[]}
 
 try:
@@ -99,8 +99,6 @@ notebook.grid(row=0, column=0, sticky='nsew')
 listingframe = ttk.Frame(notebook,padding=(0,12))
 optionsframe = ttk.Frame(notebook,padding=12)
 
-
-
 watchedPaths = []
 
 class watchedPath(tk.Frame):
@@ -126,24 +124,34 @@ class watchedPath(tk.Frame):
 
         self.optionframe = ttk.Frame(self)
 
-        self.allowDelete = ttk.Checkbutton(self.optionframe,text='Allow Deletion')
+        self.allowDeleteVar = tk.BooleanVar()
+        self.allowDelete = ttk.Checkbutton(self.optionframe,text='Allow Deletion',var=self.allowDeleteVar)
         self.allowDelete.pack(anchor="sw", side="left", expand=False, fill='x')
 
-        self.removeNonVideo = ttk.Checkbutton(self.optionframe,text='Remove Non-Video files')
+        self.removeNonVideoVar = tk.BooleanVar()
+        self.removeNonVideo = ttk.Checkbutton(self.optionframe,text='Remove Non-Video files',var=self.removeNonVideoVar)
         self.removeNonVideo.pack(anchor="sw", side="left", expand=False, fill='x')
 
-
-        self.removeEmptyDirs = ttk.Checkbutton(self.optionframe,text='Remove Empty Folders')
+        self.removeEmptyDirsVar = tk.BooleanVar()
+        self.removeEmptyDirs = ttk.Checkbutton(self.optionframe,text='Remove Empty Folders',var=self.removeEmptyDirsVar)
         self.removeEmptyDirs.pack(anchor="sw", side="left", expand=False, fill='x')
 
+        self.includeInSearchVar = tk.BooleanVar()
+        self.includeInSearchVar.set(True)
+        self.includeInSearch = ttk.Checkbutton(self.optionframe,text='Include In Search',var=self.includeInSearchVar)
+        self.includeInSearch.pack(anchor="sw", side="left", expand=False, fill='x')
+
+        self.includeInSearchVar.trace('w',self.includeInSearchChanged)
 
         self.optionframe.pack(anchor="sw", side="bottom", expand=True, fill='x')
-
 
     def rem(self):
         config['sourceDirs'].remove(self.path)
         watchedPaths.remove(self)
         self.destroy()
+
+    def includeInSearchChanged(*args):
+        dosearch(force=True)
 
 class watchedPlaylist(tk.Frame):
     def __init__(self, path, master):
@@ -197,7 +205,6 @@ def addPlaylist():
             watchedPaths.append(wp)
             config['sourceDirs'].append(pl_selected)
 
-
 for path in config['sourceDirs']:
     wp = watchedPath(path,pathsFrame)
     wp.pack(anchor="n", side="top", expand='true',fill='x')
@@ -220,7 +227,7 @@ columns = ('filename', 'score', 'playcount', 'createddate', 'size')
 tree = ttk.Treeview(listingframe, columns=columns, show='headings', selectmode='browse')
 
 def datetimeparse(dt):
-    return datetime.datetime.strptime(dt,'%Y-%m-%d')
+    return datetime.datetime.strptime(dt,time_format)
 
 def sizeof_fmt(num, suffix="B"):
     for unit in ("", "K", "M", "G", "T", "P", "E", "Z"):
@@ -290,11 +297,11 @@ tree.heading('size', text='Size', command = lambda c='size': sorttree(c,False) )
 tree.grid(row=1, column=0, sticky='nsew')
 tree.column("score", minwidth=60, width=60, stretch='NO')
 tree.column("playcount", minwidth=60, width=60, stretch='NO')
-tree.column("createddate", minwidth=90, width=90, stretch='NO')
+tree.column("createddate", minwidth=100, width=100, stretch='NO')
 tree.column("size", minwidth=90, width=90, stretch='NO')
 
 
-detailFrame = ttk.LabelFrame(listingframe,tex="Video Details")
+detailFrame = ttk.LabelFrame(listingframe,text="Video Details")
 detailFrame.grid(row=2, column=0, sticky='nsew')
 
 playerFrames = []
@@ -456,8 +463,6 @@ editorVar.trace('w',editorChange)
 def edtitorcwdChange(*args):
     config['editor_cwd'] = editorcwdVar.get()
 editorcwdVar.trace('w',edtitorcwdChange)
-
-
 
 def speedchange(*args):
     try:
@@ -1023,7 +1028,17 @@ def dosearch(force=False):
 
     fileAdded = None
 
+
+    activePaths = []
+
+    for p in watchedPaths:
+        if p.includeInSearchVar.get():
+            activePaths.append(p.path)
+
     for plf,pldat in pl:
+
+        if pldat['sorcescandir'] not in activePaths:
+            continue
 
         if any(all(n in plf.upper() for n in ns) for ns in needlesets):
             filtersPass = True
@@ -1038,7 +1053,7 @@ def dosearch(force=False):
                 if fileAdded  is None:
                     fileAdded = plf
 
-                create_time = datetime.datetime.fromtimestamp(pldat['createddate']).strftime('%Y-%m-%d')
+                create_time = datetime.datetime.fromtimestamp(pldat['createddate']).strftime(time_format)
                 size = sizeof_fmt(pldat['size'])
                 tree.insert('', tk.END, iid=plf, values=(pldat['path'],pldat['score'],pldat['playcount'],create_time,size))
 
